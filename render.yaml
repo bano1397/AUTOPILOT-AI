@@ -1,0 +1,48 @@
+# Render Blueprint for the AutoPilot AI backend (free Docker web service).
+# Deploy: push this repo to GitHub → Render → New → Blueprint → pick the repo.
+# Secrets marked `sync: false` are entered in the Render dashboard (not here).
+services:
+  - type: web
+    name: autopilot-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_FORMAT
+        value: json
+      - key: LLM_PROVIDER
+        value: groq
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
+      - key: EMBEDDING_PROVIDER
+        value: jina
+      - key: EMBEDDING_DIM
+        value: "768"
+      - key: VECTOR_STORE_PROVIDER
+        value: qdrant
+      - key: CHROMA_COLLECTION
+        value: autopilot_documents
+      - key: DOCUMENTS_DIR
+        value: /data/documents
+      - key: CHECKPOINT_DB_PATH
+        value: /data/workflow_checkpoints.db
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      # ── Set these in the Render dashboard (Environment tab) ──
+      - key: DATABASE_URL # Neon: postgresql+asyncpg://…?ssl=require
+        sync: false
+      - key: CORS_ORIGINS # your Vercel URL, e.g. https://your-app.vercel.app
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: JINA_API_KEY
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false

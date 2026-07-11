@@ -1,0 +1,70 @@
+# AutoPilot AI — full-stack local/production stack.
+# One command:  docker compose up --build
+#
+# After first start, pull the models once (they persist in the ollama_models volume):
+#   docker compose exec ollama ollama pull llama3.2
+#   docker compose exec ollama ollama pull nomic-embed-text
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: sqlite+aiosqlite:////data/autopilot.db
+      CHECKPOINT_DB_PATH: /data/workflow_checkpoints.db
+      DOCUMENTS_DIR: /app/documents
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production-set-a-secure-random-secret}
+      CORS_ORIGINS: http://localhost:3000,http://localhost:3001
+      LOG_FORMAT: json
+      OLLAMA_BASE_URL: http://ollama:11434
+      CHROMA_URL: http://chromadb:8000
+      LLM_MODEL: ${LLM_MODEL:-llama3.2}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+    volumes:
+      - backend_data:/data
+      - documents:/app/documents
+    depends_on:
+      chromadb:
+        condition: service_started
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    environment:
+      # Keep the LLM loaded between requests; the default unloads after 5
+      # idle minutes, making every "first" question pay a full model reload.
+      OLLAMA_KEEP_ALIVE: 1h
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8001:8000"
+    volumes:
+      - vector_store:/chroma/chroma
+    restart: unless-stopped
+
+volumes:
+  backend_data:
+  documents:
+  vector_store:
+  ollama_models:

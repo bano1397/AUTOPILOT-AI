@@ -1,0 +1,48 @@
+# --- Secrets & environment --------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.db
+*.sqlite3
+
+# --- Node / Next.js ---------------------------------------------------------
+node_modules/
+.next/
+out/
+.turbo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Application data (runtime, not source) ---------------------------------
+/documents/
+/vector_store/
+/backend/logs/
+
+# --- Editors / OS -----------------------------------------------------------
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- Uploaded documents (local dev) ------------------------------------------
+backend/documents/
+
+# --- Machine-local compose overrides ------------------------------------------
+docker-compose.override.yml

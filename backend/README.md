@@ -1,7 +1,20 @@
+---
+title: AutoPilot AI Backend
+emoji: 🤖
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+app_port: 8000
+pinned: false
+---
+
 # AutoPilot AI — Backend
 
 FastAPI backend for the AutoPilot AI platform. See [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md)
 for the full design.
+
+> The YAML header above is metadata for **Hugging Face Spaces** (Docker SDK).
+> It is ignored everywhere else. The image listens on port 8000.
 
 ## Quickstart (development)
 

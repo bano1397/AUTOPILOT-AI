@@ -11,6 +11,7 @@ from logging.config import fileConfig
 
 from alembic import context
 from app.core.config import get_settings
+from app.database.engine import asyncpg_connect_args
 from app.database.models import Base
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -51,7 +52,11 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_migrations_online() -> None:
     """Run migrations in 'online' mode using an async engine."""
-    engine = create_async_engine(settings.database_url, poolclass=None)
+    engine = create_async_engine(
+        settings.database_url,
+        poolclass=None,
+        connect_args=asyncpg_connect_args(settings.database_url),
+    )
     async with engine.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await engine.dispose()

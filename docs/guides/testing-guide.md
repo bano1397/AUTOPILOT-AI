@@ -9,22 +9,25 @@ Every change must pass, on both sides:
 cd backend
 ruff check .          # lint
 mypy app              # strict type-check
-pytest                # 200+ tests
+pytest                # 370+ tests
 
 # frontend
 cd frontend
 npm run lint          # eslint
 npm run type-check    # tsc --noEmit (strict)
 npm run build         # production build must succeed
+npm run test:e2e      # Playwright, six core journeys
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same gates on every push and PR.
+CI (`.github/workflows/ci.yml`) runs the same gates on every push and PR, in
+three jobs: backend, frontend, and e2e.
 
 ## How tests are structured
 
-- `tests/unit/` — pure logic with no I/O: security (argon2/JWT), event bus,
-  registry, chunking, extractors, provider wire formats (`httpx.MockTransport`),
-  plan parsing, supervisor routing.
+- `tests/unit/` — pure logic with no I/O: event bus, registry, chunking,
+  extractors, provider wire formats (`httpx.MockTransport`), plan parsing,
+  supervisor routing, prompt rendering, the memory facade, and the stub
+  providers.
 - `tests/integration/` — the real ASGI app against an **isolated per-test
   SQLite database**, tmp-dir file storage, and in-memory fake providers from
   `tests/fakes.py` (LLM, embeddings, vector store, search). No network.
@@ -55,3 +58,42 @@ Ollama + ChromaDB. They are skipped unless enabled:
 ```bash
 AUTOPILOT_EXTERNAL_TESTS=1 pytest tests/integration/test_external_providers.py
 ```
+
+## End-to-end tests
+
+`frontend/e2e/` drives a real browser against a **real backend** — one
+configured with the stub LLM, stub embeddings, and the in-process vector store,
+so the suite needs no model server, no ChromaDB, and no network:
+
+```bash
+cd frontend
+npm run test:e2e        # Playwright starts both servers itself
+npm run test:e2e:ui     # same, with the interactive runner
+```
+
+Playwright launches the backend on port 8100 and the frontend on 3100 — not the
+usual 8000/3000, so a run can never touch your dev stack or its database. State
+lives in `backend/.e2e-state/` and is wiped on every start.
+
+**Scope, stated plainly:** these tests prove the *wiring* — uploads index,
+knowledge search retrieves, the supervisor routes, citations render, the
+planner writes tasks, approvals pause and resume a run. They prove nothing
+about answer quality, because a stub has none. Model behaviour is out of scope
+for CI by design; the opt-in live tests below are where real providers get
+exercised.
+
+Two details worth knowing before editing the suite:
+
+- **`workers: 1` is correctness, not caution.** The backend is a single shared
+  workspace with no authentication, so there is no tenant boundary to isolate
+  parallel specs behind — two at once would see each other's documents.
+  Journeys run in declaration order and journey 1 indexes the document that
+  journeys 2 and 3 retrieve.
+- **The web server runs the standalone build** (`node .next/standalone/server.js`
+  with `.next/static` and `public` copied beside it), because `next.config.mjs`
+  sets `output: "standalone"` and `next start` does *not* serve that layout — it
+  400s on page chunks, so pages render but never hydrate. This mirrors the
+  Dockerfile, so the suite exercises the real production serving path.
+
+To debug against servers you started yourself, set `E2E_EXTERNAL_SERVERS=1` and
+Playwright will leave them alone.

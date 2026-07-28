@@ -116,7 +116,7 @@ Designed in `ARCHITECTURE.md`, absent from the code:
 
 ### F5 — Operational gaps
 
-- No end-to-end test suite (no Playwright/Cypress); CI covers unit+integration only.
+- ~~No end-to-end test suite (no Playwright/Cypress).~~ **Closed** — see §6 2.4.
 - Event bus is in-process → correctness assumes a single replica. (The rate
   limiter is removed in Phase 0.2 along with the auth endpoints it protected,
   leaving the public URL unthrottled — see §3.)
@@ -396,9 +396,22 @@ a working deployment; uploads survive a restart.
 >   tests. 6 tests. **Still missing: the `MemoryManager` facade and long-term
 >   vector memory** (levels 3 of 6). `notifications_enabled` is stored but not
 >   yet consulted by the dispatcher — it is currently decorative.
-> - **2.4 Playwright e2e** ❌ not started. Needs a running stack (Ollama models,
->   ~4.7 GB) that this environment can't host; it is the highest-value remaining
->   test work.
+> - **2.4 Playwright e2e** ✅ **done** (2026-07-29). The blocker — "needs a
+>   running stack (Ollama models, ~4.7 GB)" — was dissolved rather than worked
+>   around: three zero-dependency providers (`LLM_PROVIDER=stub`,
+>   `EMBEDDING_PROVIDER=stub`, `VECTOR_STORE_PROVIDER=memory`) let the real
+>   backend run with no model server, no ChromaDB, and no network. All six
+>   journeys pass in ~3 s, and CI gained a third job.
+>   **Bounded on purpose:** the suite proves wiring, not answer quality — a stub
+>   has none. 18 unit tests pin the stubs' determinism and structural validity
+>   (the planner's real parser must accept the stub's JSON, the routing reply
+>   must be a bare route word).
+>   Two real defects surfaced while getting it green, both now fixed in the
+>   config and documented in the testing guide: `next start` does not serve an
+>   `output: "standalone"` build (pages render, then never hydrate — the suite
+>   now runs the standalone server exactly as the Dockerfile does), and
+>   `workers: 1` is required because a single shared workspace has no tenant
+>   boundary to isolate parallel specs behind.
 
 These are the "enterprise platform" claims that currently have no code. Order
 matters: the tool registry is the keystone the others hang off.
@@ -562,7 +575,7 @@ Local-default calendar adapter with a Google adapter seam; single
 ```
 Phase 0  ✅ DONE      Green gates + auth removed
 Phase 1  ✅ DONE      Deployable, honestly documented   (1.4 blocked: no credentials)
-Phase 2  ◐ PARTIAL    Tools ✅ · Prompts ✅ · Preferences ✅ · Memory ✅ · e2e ❌
+Phase 2  ✅ DONE      Tools ✅ · Prompts ✅ · Preferences ✅ · Memory ✅ · e2e ✅
 Phase 3  ◐ PARTIAL    Email ✅ · MCP ✅ · RAG depth ❌ · Workflow lifecycle ❌
 Phase 4  ☐ NOT STARTED Redis · Postgres checkpoints · metrics · diagrams
 ```
@@ -574,7 +587,7 @@ Phase 4  ☐ NOT STARTED Redis · Postgres checkpoints · metrics · diagrams
 | 1 | Live cloud walkthrough incl. the S3 signature (§1.4) | 1 h | **Your credentials** |
 | ~~2~~ | ~~`MemoryManager` facade + long-term vector memory (§2.3)~~ | ✅ **done** | — |
 | ~~3~~ | ~~Consult `notifications_enabled` in the dispatcher~~ | ✅ **done** | — |
-| 4 | Playwright e2e, 6 journeys, CI job (§2.4) | 1–2 d | Local stack + models |
+| ~~4~~ | ~~Playwright e2e, 6 journeys, CI job (§2.4)~~ | ✅ **done** | — |
 | ~~5~~ | ~~Email agent — IMAP → classify → draft → approve → SMTP (§3.1)~~ | ✅ **done** | — |
 | ~~6~~ | ~~MCP client + `MCPToolAdapter` + MCP server (§3.2)~~ | ✅ **done** | — |
 | 7 | RAG depth: OCR, hybrid search, rerank, compression (§3.3) | 3–4 d | — |

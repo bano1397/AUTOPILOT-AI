@@ -47,3 +47,9 @@ backend/documents/
 
 # --- Machine-local compose overrides ------------------------------------------
 docker-compose.override.yml
+
+# --- Playwright e2e ------------------------------------------------------------
+frontend/e2e/.artifacts/
+frontend/playwright-report/
+frontend/test-results/
+backend/.e2e-state/

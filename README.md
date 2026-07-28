@@ -44,6 +44,9 @@ designed but not yet built — see the guides.) Full design in
   `POST /api/v1/tools/mcp`.
 - **Workspace preferences** — instance-wide defaults that actually change
   behavior (retrieval breadth, approval gating, notification delivery).
+- **Memory** — all six levels behind one `MemoryManager`, including durable
+  long-term facts the general agent recalls and grounds on, indexed in their
+  own vector namespace so they never leak into document search.
 
 ---
 
@@ -146,7 +149,14 @@ make install-hooks  # run it automatically on every push
 # or individually
 cd backend  && ruff check . && mypy app && pytest
 cd frontend && npm run lint && npm run type-check && npm run build
+cd frontend && npm run test:e2e   # Playwright, six core journeys
 ```
+
+The e2e suite drives a real backend running the zero-dependency provider set
+(`LLM_PROVIDER=stub`, `EMBEDDING_PROVIDER=stub`, `VECTOR_STORE_PROVIDER=memory`),
+so it needs no model server and no network. That same set is the fastest way to
+try the app locally — it starts instantly, and every answer is fixed and
+unintelligent. See [`docs/guides/testing-guide.md`](docs/guides/testing-guide.md).
 
 CI runs all of the above on every push and pull request. **The gate results are
 in CI, not in this file** — a README claiming "all green" is a claim that rots.
@@ -163,9 +173,9 @@ against actually-executed gate runs. As-built module detail:
 [`docs/PROJECT_ANALYSIS.md`](docs/PROJECT_ANALYSIS.md); design blueprint:
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-Not yet built (designed, not shipped): calendar agent, long-term vector memory,
-workflow versioning/rollback, OCR / hybrid search / reranking, visual workflow
-builder, WebSocket live status, browser end-to-end tests.
+Not yet built (designed, not shipped): calendar agent, workflow
+versioning/rollback, OCR / hybrid search / reranking, visual workflow builder,
+WebSocket live status.
 
 > Chat/agent features use the Ollama model set by `LLM_MODEL` (default
 > `llama3`; `llama3.2` is a lighter alternative):

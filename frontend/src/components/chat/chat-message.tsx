@@ -43,6 +43,7 @@ function AssistantMessage({ turn }: { turn: ChatTurn }) {
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       className="flex gap-3"
+      data-testid="assistant-turn"
     >
       <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
         <Bot className="size-4" />
@@ -55,7 +56,11 @@ function AssistantMessage({ turn }: { turn: ChatTurn }) {
       >
         <div className="flex flex-wrap items-center gap-1.5">
           {turn.agent && (
-            <Badge variant="secondary" className="capitalize">
+            <Badge
+              variant="secondary"
+              className="capitalize"
+              data-testid="agent-badge"
+            >
               {turn.agent}
             </Badge>
           )}

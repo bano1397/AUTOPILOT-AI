@@ -366,7 +366,28 @@ a working deployment; uploads survive a restart.
 >   17 tests. **Reduced scope, deliberately:** no DB-backed authoring UI and no
 >   scored evaluation / version promotion — prompts stay code-defined so there is
 >   one reviewable source of truth. Those remain open (see §7.6).
-> - **2.3 Memory + preferences** — **preferences ✅, memory ❌.**
+> - **2.3 Memory + preferences** — **both ✅** (memory completed 2026-07-29).
+>   `MemoryManager` lives in `platform/memory/` (not the blueprint's
+>   `app/memory/`, to sit with the other cross-cutting platform concerns) and
+>   fronts all six levels: working memory is implemented inline, the other five
+>   delegate to their owning service. Levels are optional and an unconfigured
+>   level raises rather than silently returning nothing.
+>   Long-term memory is `memory_entries` (migration `a4d90c17e6b2`) plus a
+>   **separate vector collection** (`MEMORY_COLLECTION`), with
+>   `GET`/`POST`/`DELETE /memory` and `POST /memory/recall`.
+>   **It changes behavior:** the general agent recalls up to 3 durable facts and
+>   grounds on them, via a new `agent.general.system` **v2** — v1 is retained
+>   inactive, and a test pins that v2 with no memories renders byte-identical to
+>   v1, so conversations without stored facts are unchanged.
+>   32 tests. Deliberate choices, each test-pinned: a separate collection rather
+>   than a `kind` filter (pre-existing document vectors carry no such field, so a
+>   filter would have silently dropped them from RAG); `remember` keeps the row
+>   when embedding fails and reports `indexed: false` rather than lying;
+>   `recall` raises on an outage but the agent path uses `recall_or_empty` so a
+>   dead vector store costs recollections, not the reply; recall skips vectors
+>   whose row is gone, so a leaked vector cannot resurrect a forgotten fact.
+>
+> - **2.3 (historical) Memory + preferences** — **preferences ✅, memory ❌.**
 >   `workspace_preferences` (single row, migration `e5c1a7d24b83`) with
 >   `GET`/`PATCH /preferences`, wired into the Settings page's new Workspace
 >   panel. **The preferences actually change behavior** — `default_top_k` backs
@@ -541,7 +562,7 @@ Local-default calendar adapter with a Google adapter seam; single
 ```
 Phase 0  ✅ DONE      Green gates + auth removed
 Phase 1  ✅ DONE      Deployable, honestly documented   (1.4 blocked: no credentials)
-Phase 2  ◐ PARTIAL    Tools ✅ · Prompts ✅ · Preferences ✅ · Memory ❌ · e2e ❌
+Phase 2  ◐ PARTIAL    Tools ✅ · Prompts ✅ · Preferences ✅ · Memory ✅ · e2e ❌
 Phase 3  ◐ PARTIAL    Email ✅ · MCP ✅ · RAG depth ❌ · Workflow lifecycle ❌
 Phase 4  ☐ NOT STARTED Redis · Postgres checkpoints · metrics · diagrams
 ```
@@ -551,7 +572,7 @@ Phase 4  ☐ NOT STARTED Redis · Postgres checkpoints · metrics · diagrams
 | # | Item | Est. | Blocked by |
 |---|---|---|---|
 | 1 | Live cloud walkthrough incl. the S3 signature (§1.4) | 1 h | **Your credentials** |
-| 2 | `MemoryManager` facade + long-term vector memory (§2.3) | 1 d | — |
+| ~~2~~ | ~~`MemoryManager` facade + long-term vector memory (§2.3)~~ | ✅ **done** | — |
 | ~~3~~ | ~~Consult `notifications_enabled` in the dispatcher~~ | ✅ **done** | — |
 | 4 | Playwright e2e, 6 journeys, CI job (§2.4) | 1–2 d | Local stack + models |
 | ~~5~~ | ~~Email agent — IMAP → classify → draft → approve → SMTP (§3.1)~~ | ✅ **done** | — |

@@ -16,6 +16,7 @@ from app.domain.interfaces.search import SearchProvider
 from app.features.rag.service import RagAskService
 from app.features.tasks.service import TaskService
 from app.features.workflows.service import ExecutionOutcome, WorkflowExecutor
+from app.platform.memory import MemoryManager
 from app.platform.observability.recorder import AiExecutionRecorder
 from app.platform.registry import agent_registry
 from app.workflows.graph import build_agent_graph
@@ -49,10 +50,11 @@ class AgentRunService:
         search: SearchProvider,
         tasks: TaskService,
         checkpointer: Any | None = None,
+        memory: MemoryManager | None = None,
     ) -> None:
         supervisor = SupervisorAgent(llm, recorder)
         knowledge = KnowledgeAgent(ask_service)
-        general = GeneralAgent(llm, recorder)
+        general = GeneralAgent(llm, recorder, memory)
         research = ResearchAgent(search, llm, recorder)
         planner = PlannerAgent(tasks, llm, recorder)
         self._graph = build_agent_graph(

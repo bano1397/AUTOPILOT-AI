@@ -43,6 +43,15 @@ def get_vector_store(request: Request) -> VectorStoreProvider:
     return cast(VectorStoreProvider, request.app.state.vector_store)
 
 
+def get_memory_vector_store(request: Request) -> VectorStoreProvider:
+    """Return the vector store backing long-term memory.
+
+    A separate namespace from :func:`get_vector_store`, which serves document
+    chunks; see ``app.features.memory.service`` for why they are not shared.
+    """
+    return cast(VectorStoreProvider, request.app.state.memory_vector_store)
+
+
 def get_llm(request: Request) -> LLMProvider:
     """Return the application-scoped LLM provider."""
     return cast(LLMProvider, request.app.state.llm)

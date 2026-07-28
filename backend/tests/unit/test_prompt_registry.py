@@ -101,11 +101,15 @@ class TestCatalog:
             active = [t for t in prompt_registry.versions(key) if t.active]
             assert len(active) == 1, f"{key} has {len(active)} active versions"
 
-    def test_catalogued_bodies_render_without_variables(self) -> None:
-        # The live prompts are static system messages; the per-request content is
-        # assembled in code. Rendering must therefore need no variables.
-        for key in prompt_registry.keys():
-            assert prompt_registry.render(key)
+    def test_every_catalogued_version_renders(self) -> None:
+        # Live prompts are system messages whose per-request content is assembled
+        # in code, so they declare few variables — but they may declare some
+        # (agent.general.system v2 takes `memories`). Every version, active or
+        # retired, must still render: a retired version that cannot be rendered
+        # breaks the reproducibility its AiExecution rows promise.
+        for template in prompt_registry.all_templates():
+            empty = {name: [] for name in template.variables}
+            assert template.render(**empty)
 
     def test_routing_prompt_still_contains_its_routing_contract(self) -> None:
         body = prompt_registry.render("agent.supervisor.routing")

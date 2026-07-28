@@ -19,6 +19,8 @@ from app.features.tasks.dependencies import get_task_service
 from app.features.tasks.service import TaskService
 from app.features.workflows.dependencies import get_workflow_executor
 from app.features.workflows.service import WorkflowExecutor
+from app.platform.memory import MemoryManager
+from app.platform.memory.dependencies import get_memory_manager
 from app.platform.observability.recorder import AiExecutionRecorder
 
 
@@ -30,7 +32,8 @@ def get_agent_run_service(
     search: SearchProvider = Depends(get_search),
     tasks: TaskService = Depends(get_task_service),
     checkpointer: object | None = Depends(get_checkpointer),
+    memory: MemoryManager = Depends(get_memory_manager),
 ) -> AgentRunService:
     return AgentRunService(
-        llm, recorder, ask_service, executor, search, tasks, checkpointer
+        llm, recorder, ask_service, executor, search, tasks, checkpointer, memory
     )

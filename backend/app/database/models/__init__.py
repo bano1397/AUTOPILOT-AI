@@ -10,6 +10,7 @@ from app.features.approvals.models import Approval, ApprovalStatus
 from app.features.conversations.models import Conversation, Message
 from app.features.documents.models import Document, DocumentChunk, DocumentStatus
 from app.features.emails.models import Email, EmailIntent, EmailStatus
+from app.features.memory.models import MemoryEntry, MemoryKind
 from app.features.notifications.models import Notification
 from app.features.preferences.models import WorkspacePreferences
 from app.features.tasks.models import Task, TaskPriority, TaskStatus
@@ -29,6 +30,8 @@ __all__ = [
     "Email",
     "EmailIntent",
     "EmailStatus",
+    "MemoryEntry",
+    "MemoryKind",
     "Message",
     "Notification",
     "WorkspacePreferences",

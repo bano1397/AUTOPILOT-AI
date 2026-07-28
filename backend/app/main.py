@@ -130,20 +130,22 @@ def _build_storage(settings: Settings) -> StorageProvider:
     return LocalStorageProvider(settings.documents_dir)
 
 
-def _build_vector_store(settings: Settings) -> VectorStoreProvider:
-    """Select the vector store from config (local Chroma or cloud Qdrant)."""
+def _build_vector_store(settings: Settings, collection: str) -> VectorStoreProvider:
+    """Select the vector store from config (local Chroma or cloud Qdrant).
+
+    ``collection`` names the namespace: document chunks and long-term memory
+    each get their own, so neither can contaminate the other's search results.
+    """
     if settings.vector_store_provider == "qdrant":
         if not settings.qdrant_url:
             raise ValueError("VECTOR_STORE_PROVIDER=qdrant requires QDRANT_URL")
         return QdrantVectorStore(
             base_url=settings.qdrant_url,
-            collection=settings.chroma_collection,
+            collection=collection,
             dimension=settings.embedding_dim,
             api_key=settings.qdrant_api_key,
         )
-    return ChromaVectorStore(
-        base_url=settings.chroma_url, collection=settings.chroma_collection
-    )
+    return ChromaVectorStore(base_url=settings.chroma_url, collection=collection)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -199,7 +201,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.db = db
     app.state.storage = _build_storage(settings)
     app.state.embeddings = _build_embeddings(settings)
-    app.state.vector_store = _build_vector_store(settings)
+    app.state.vector_store = _build_vector_store(settings, settings.chroma_collection)
+    app.state.memory_vector_store = _build_vector_store(
+        settings, settings.memory_collection
+    )
     app.state.llm = _build_llm(settings)
     app.state.search = DuckDuckGoSearchProvider()
     app.state.email_reader = _build_email_reader(settings)

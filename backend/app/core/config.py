@@ -117,6 +117,11 @@ class Settings(BaseSettings):
     llm_model: str = "llama3"
     chroma_url: str = "http://localhost:8001"
     chroma_collection: str = "autopilot_documents"
+    # Long-term memory indexes into its own collection rather than sharing the
+    # document one: pre-existing document vectors carry no discriminating
+    # metadata, so a shared collection could not be filtered without silently
+    # dropping them from RAG results. Applies to Qdrant too, despite the name.
+    memory_collection: str = "autopilot_memory"
 
     # Cloud LLM (Groq — OpenAI-compatible, free tier)
     groq_api_key: str | None = None

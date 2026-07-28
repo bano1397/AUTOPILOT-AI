@@ -15,6 +15,7 @@ from app.features.approvals.router import router as approvals_router
 from app.features.conversations.router import router as conversations_router
 from app.features.documents.router import router as documents_router
 from app.features.emails.router import router as emails_router
+from app.features.memory.router import router as memory_router
 from app.features.notifications.router import router as notifications_router
 from app.features.preferences.router import router as preferences_router
 from app.features.prompts.router import router as prompts_router
@@ -48,3 +49,4 @@ api_router.include_router(prompts_router, prefix="/prompts", tags=["prompts"])
 api_router.include_router(
     preferences_router, prefix="/preferences", tags=["preferences"]
 )
+api_router.include_router(memory_router, prefix="/memory", tags=["memory"])

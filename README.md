@@ -1,8 +1,15 @@
 # AutoPilot AI
 
-> **Enterprise Multi-Agent Business Automation Platform** — an AI employee that reads
-> emails, understands documents, researches the web, plans tasks, retrieves company
-> knowledge, and executes business workflows autonomously using LangChain & LangGraph.
+> **Multi-Agent Business Automation Platform** — an AI workspace that triages
+> email, understands documents, researches the web, plans tasks, retrieves company
+> knowledge, and executes business workflows using LangChain & LangGraph.
+
+> ### ⚠ No authentication
+> This is a **single shared workspace with no login**. Anyone who can reach the URL
+> can read and write every document, conversation, and task in the instance, and
+> there is no rate limiting. It is built this way deliberately — see
+> [`docs/COMPLETION_PLAN.md`](docs/COMPLETION_PLAN.md) §3 — but it means **you must
+> not put real business data in a publicly reachable deployment**.
 
 Built as a production-grade, extensible platform: pluggable providers, plugin
 auto-discovery, an event bus, conversation memory, full RAG, checkpointed
@@ -13,8 +20,9 @@ designed but not yet built — see the guides.) Full design in
 
 ## Features
 
-- **Authentication & RBAC** — JWT with rotating, revocable refresh tokens
-  (httpOnly cookie), admin/user roles, rate-limited auth, security headers.
+- **Email agent** — IMAP sync → nine-intent classification → entity extraction
+  → RAG-grounded draft reply → **you** review, edit, and send over SMTP. Nothing
+  is ever sent automatically.
 - **Document intelligence** — upload → OCR-ready extraction → chunk → embed →
   ChromaDB index, with per-document status.
 - **RAG** — cited semantic search and retrieval-grounded answers (honest
@@ -27,7 +35,15 @@ designed but not yet built — see the guides.) Full design in
 - **Automation** — event-driven notifications (in-app/Telegram/SMTP), a
   scheduled daily digest, task management.
 - **Observability** — an analytics dashboard over the AI execution audit trail
-  (tokens, cost, latency, error rate).
+  (tokens, cost, latency, error rate), with every call traced to the exact
+  versioned prompt that produced it.
+- **Tool marketplace** — typed, self-registering tools with declared schemas and
+  dependencies, listable and invocable over HTTP.
+- **MCP** — consumes tools from configured MCP servers (stdio + HTTP) into the
+  same registry agents use, and exposes its own tools *as* an MCP server at
+  `POST /api/v1/tools/mcp`.
+- **Workspace preferences** — instance-wide defaults that actually change
+  behavior (retrieval breadth, approval gating, notification delivery).
 
 ---
 
@@ -37,7 +53,7 @@ designed but not yet built — see the guides.) Full design in
 |---|---|
 | Backend | FastAPI · SQLAlchemy 2.0 (async) · Alembic · Pydantic v2 |
 | AI | LangChain · LangGraph · Ollama (abstracted) · ChromaDB |
-| Frontend | Next.js 14 (App Router) · TypeScript · Tailwind · shadcn/ui · TanStack Query · Zustand |
+| Frontend | Next.js 14 (App Router) · TypeScript · Tailwind · shadcn/ui · TanStack Query |
 | Database | SQLite (dev) → PostgreSQL-ready |
 | Infra | Docker · Docker Compose |
 
@@ -59,7 +75,7 @@ autopilot-ai/
 ### Option A — Docker (one command)
 
 ```bash
-cp .env.example .env      # set JWT_SECRET_KEY for anything non-local
+cp .env.example .env      # defaults are fine for local use
 docker compose up --build
 ```
 
@@ -106,36 +122,50 @@ real `.env`.
 | Variable | Purpose | Default |
 |---|---|---|
 | `DATABASE_URL` | Async SQLAlchemy URL | `sqlite+aiosqlite:///./autopilot.db` |
-| `JWT_SECRET_KEY` | JWT signing secret (**set in production**) | dev placeholder |
 | `CORS_ORIGINS` | Allowed browser origins (comma-separated) | `http://localhost:3000` |
 | `NEXT_PUBLIC_API_URL` | Backend base URL (frontend) | `http://localhost:8000` |
+| `LLM_PROVIDER` | `ollama` (local) or `groq` (cloud) | `ollama` |
+| `EMBEDDING_PROVIDER` | `ollama` or `jina` | `ollama` |
+| `VECTOR_STORE_PROVIDER` | `chroma` or `qdrant` | `chroma` |
+| `STORAGE_PROVIDER` | `local` disk or `s3`-compatible bucket | `local` |
 
-Generate a strong secret: `python -c "import secrets; print(secrets.token_urlsafe(64))"`
+Production templates with every cloud variable:
+[`backend/.env.production.example`](backend/.env.production.example) and
+[`frontend/.env.production.example`](frontend/.env.production.example).
 
 ---
 
 ## Quality gates
 
 ```bash
-# backend
-cd backend && ruff check . && mypy app && pytest
+make check          # everything below, exactly as CI runs it
+make install-hooks  # run it automatically on every push
+```
 
-# frontend
+```bash
+# or individually
+cd backend  && ruff check . && mypy app && pytest
 cd frontend && npm run lint && npm run type-check && npm run build
 ```
 
-CI runs all of the above on every push and pull request.
+CI runs all of the above on every push and pull request. **The gate results are
+in CI, not in this file** — a README claiming "all green" is a claim that rots.
 
 ---
 
 ## Status
 
-**All milestones (M1–M5) complete — the platform is feature-complete.**
-Foundation · Documents & RAG · Agents & LLM · Workflows & Automation ·
-Hardening & Ship. Everything in the Features list above works end-to-end
-(verified live against Ollama + ChromaDB). As-built detail:
-[`docs/PROJECT_ANALYSIS.md`](docs/PROJECT_ANALYSIS.md); design:
+Milestones M1–M5 delivered the platform described in the Features list above;
+authentication was subsequently removed by design (§3 of the completion plan).
+**What is built, what is not, and the plan for the rest live in
+[`docs/COMPLETION_PLAN.md`](docs/COMPLETION_PLAN.md)** — it is kept honest
+against actually-executed gate runs. As-built module detail:
+[`docs/PROJECT_ANALYSIS.md`](docs/PROJECT_ANALYSIS.md); design blueprint:
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+Not yet built (designed, not shipped): calendar agent, long-term vector memory,
+workflow versioning/rollback, OCR / hybrid search / reranking, visual workflow
+builder, WebSocket live status, browser end-to-end tests.
 
 > Chat/agent features use the Ollama model set by `LLM_MODEL` (default
 > `llama3`; `llama3.2` is a lighter alternative):

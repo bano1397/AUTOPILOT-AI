@@ -5,7 +5,15 @@
 > [`ARCHITECTURE.md`](ARCHITECTURE.md) is the forward-looking blueprint (the "should be");
 > this file is the "is". Updated at milestone boundaries.
 >
-> **Last updated:** 2026-07-11 · **Status:** M1–M5 complete — project feature-complete
+> **Last updated:** 2026-07-28 · **Status:** M1–M5 delivered; authentication
+> subsequently **removed by design**; see
+> [`COMPLETION_PLAN.md`](COMPLETION_PLAN.md) for verified state and remaining work.
+>
+> ⚠ **Sections describing authentication, JWT, refresh tokens, and RBAC below are
+> historical.** They document the system as it was through M5. Phase 0 of the
+> completion plan removed all of it (no login, no tokens, no roles — one shared
+> workspace identity). The auth-specific text is kept because the surrounding
+> design rationale is still useful, but do not read it as current.
 
 ---
 
@@ -187,7 +195,13 @@ with a registry-registered default implementation in `app/infrastructure/`:
 #### `features/system` — probes
 `GET /health` (liveness), `GET /health/ready` (checks DB connectivity), `GET /` (app info).
 
-#### `features/auth` — authentication (blueprint §8)
+#### `features/auth` — authentication (blueprint §8) — **REMOVED**
+
+> Deleted in completion-plan Phase 0 along with `core/security.py`,
+> `core/ratelimit.py`, the `refresh_tokens` table, and the `users.password_hash`
+> / `users.role` columns. `get_current_user` became
+> `app.features.users.dependencies.get_workspace_user`, which resolves a single
+> shared identity. The historical description follows.
 Endpoints (all enveloped, mounted at `/api/v1/auth`):
 
 | Endpoint | Behavior |
@@ -236,7 +250,11 @@ store), returns cited matches — `document_id`, `filename`, `chunk_index`, full
 `text`, `distance` — straight from vector metadata (no DB round-trip). Provider outages
 surface as 502 `UPSTREAM_SERVICE_ERROR` naming the failing provider.
 
-#### `features/users` — user management + RBAC (blueprint §9)
+#### `features/users` — workspace identity (was: user management + RBAC)
+
+> RBAC (`require_role` / `require_admin`) was removed in Phase 0; `GET /users` is
+> now open and `GET /users/me` returns the shared workspace identity. Historical
+> description follows.
 - `require_role(*roles)` dependency factory (built on `get_current_user`) raising
   `PermissionDeniedError` → 403 envelope; `require_admin` is the canonical instance.
 - `GET /api/v1/users` — admin-only, paginated (`ApiResponse[list[UserRead]]` with

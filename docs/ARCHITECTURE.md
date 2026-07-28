@@ -543,6 +543,12 @@ Cross-cutting: pagination (`page`,`page_size`≤100), typed filtering/sorting, i
 
 ## 12. Authentication & Authorization Flow
 
+> **DESCOPED BY DECISION.** The shipped platform has no authentication: it is a
+> single shared workspace (rationale in
+> [`COMPLETION_PLAN.md`](COMPLETION_PLAN.md) §3). This section is retained as the
+> design of a path not taken — it is the reference if accounts are ever added,
+> and the `user_id` columns it implies are still present throughout the schema.
+
 ```mermaid
 sequenceDiagram
     participant U as UI

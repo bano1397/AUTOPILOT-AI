@@ -1,13 +1,51 @@
 # MCP Integration Guide
 
-> **Status: planned, not yet implemented.** The approved architecture
-> ([`../ARCHITECTURE.md` §8](../ARCHITECTURE.md)) specifies a Model Context
-> Protocol layer, but it is **not part of the current build** (milestones
-> M1–M5 delivered auth, RAG, agents, workflows/automation, and hardening). This
-> guide documents the intended design so it can be added without rework; it
-> does not describe shipped functionality.
+> **Status: implemented.** `app/mcp/` ships both directions — consuming tools
+> from configured MCP servers and exposing AutoPilot's own tools as an MCP
+> server. 33 tests cover the protocol parsing, both transports, the adapter, and
+> the server endpoint. Not implemented: SSE streaming transport, long-lived stdio
+> sessions (a process is spawned per call batch), and resources/prompts
+> primitives — only `initialize`, `tools/list`, and `tools/call`.
 
-## Intended design
+## As built
+
+### Consuming external MCP tools
+
+Configure the allow-list in `MCP_SERVERS` (JSON array):
+
+```bash
+MCP_SERVERS=[{"name":"files","transport":"stdio","command":"mcp-server-filesystem","args":["/data"]}]
+MCP_SERVERS=[{"name":"remote","transport":"http","url":"https://host/mcp","headers":{"Authorization":"Bearer ..."}}]
+```
+
+At startup `discover_mcp_tools` connects to each server, calls `tools/list`, and
+registers an `MCPToolAdapter` per remote tool into the **same** `tool_registry`
+native tools use. Remote names are prefixed `mcp__` so they can never shadow a
+native tool, and input models are synthesized from each tool's advertised JSON
+Schema. Discovery is failure-isolated: an unreachable server logs and is skipped,
+never blocking boot.
+
+They then appear in `GET /api/v1/tools` with `origin: "mcp"` and are invocable
+through `POST /api/v1/tools/{name}/invoke` like anything else.
+
+### Serving AutoPilot as an MCP server
+
+`POST /api/v1/tools/mcp` speaks JSON-RPC 2.0 (`initialize`, `tools/list`,
+`tools/call`) over the native tools — `vector_search`, `web_search`,
+`create_task`. MCP-origin tools are deliberately excluded so this endpoint never
+becomes a proxy hop back to another server.
+
+### Security
+
+- `MCP_SERVERS` is the only source of servers; nothing discovers or trusts a
+  server named by remote content.
+- Tool results are **data, never instructions** — `parse_call_result` normalizes
+  them into a dict and no caller executes them.
+- `ToolMeta.permissions` on adapted tools is declarative only, matching native
+  tools: this platform has no role model to enforce against (see
+  `../COMPLETION_PLAN.md` §3).
+
+## Original design sketch (retained)
 
 An `app/mcp/` package with:
 

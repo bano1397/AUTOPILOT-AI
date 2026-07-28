@@ -52,6 +52,8 @@ class PlannerAgent(BaseAgent):
             agent_name=self.name,
             user_id=user_id,
             temperature=0.2,
+            prompt_key="agent.planner.system",
+            prompt_version=1,
         )
 
         items = parse_plan(result.content)

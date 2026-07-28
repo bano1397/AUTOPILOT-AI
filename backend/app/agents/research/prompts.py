@@ -5,14 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from app.domain.interfaces.llm import ChatMessage, ChatRole, history_to_messages
-
-RESEARCH_SYSTEM_PROMPT = (
-    "You are AutoPilot AI's research analyst. Answer the user's question using "
-    "ONLY the numbered web sources provided below. Cite the sources you used "
-    "as [1], [2], etc. Be factual and concise; when sources disagree, say so. "
-    "If the sources do not contain the information needed, say so plainly "
-    "instead of guessing."
-)
+from app.platform.prompts.catalog import RESEARCH_SYSTEM_PROMPT
 
 
 def build_research_messages(

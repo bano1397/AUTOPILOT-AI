@@ -10,14 +10,7 @@ from collections.abc import Sequence
 
 from app.domain.interfaces.llm import ChatMessage, ChatRole, history_to_messages
 from app.domain.interfaces.vector_store import VectorMatch
-
-SYSTEM_PROMPT = (
-    "You are AutoPilot AI's knowledge assistant. Answer the user's question "
-    "using ONLY the numbered context excerpts provided below. Cite the "
-    "excerpts you used as [1], [2], etc. If the context does not contain the "
-    "information needed to answer, say so plainly instead of guessing. Be "
-    "concise and factual."
-)
+from app.platform.prompts.catalog import SYSTEM_PROMPT
 
 
 def _format_context(matches: Sequence[VectorMatch]) -> str:

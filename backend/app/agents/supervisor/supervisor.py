@@ -79,6 +79,8 @@ class SupervisorAgent(BaseAgent):
             agent_name=self.name,
             user_id=UUID(user_id) if user_id else None,
             temperature=0.0,
+            prompt_key="agent.supervisor.routing",
+            prompt_version=1,
         )
         route = parse_route(result.content)
         logger.info("supervisor.routed", extra={"route": route})

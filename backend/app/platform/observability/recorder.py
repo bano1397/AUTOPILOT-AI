@@ -56,6 +56,8 @@ class AiExecutionRecorder:
         agent_name: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        prompt_key: str | None = None,
+        prompt_version: int | None = None,
     ) -> LLMResult:
         """Invoke ``llm.chat`` and persist an execution record either way."""
         provider_name = str(getattr(llm, "name", "unknown"))
@@ -78,6 +80,8 @@ class AiExecutionRecorder:
                 completion_tokens=0,
                 duration_ms=elapsed_ms,
                 error=str(exc),
+                prompt_key=prompt_key,
+                prompt_version=prompt_version,
             )
             raise
 
@@ -94,6 +98,8 @@ class AiExecutionRecorder:
             completion_tokens=result.completion_tokens,
             duration_ms=result.duration_ms or elapsed_ms,
             error=None,
+            prompt_key=prompt_key,
+            prompt_version=prompt_version,
         )
         return result
 
@@ -111,6 +117,8 @@ class AiExecutionRecorder:
         completion_tokens: int,
         duration_ms: int,
         error: str | None,
+        prompt_key: str | None = None,
+        prompt_version: int | None = None,
     ) -> None:
         """Persist the execution and publish ``CostRecorded``. Never raises."""
         cost_usd = compute_cost(provider, model, prompt_tokens, completion_tokens)
@@ -128,6 +136,8 @@ class AiExecutionRecorder:
                 cost_usd=cost_usd,
                 duration_ms=duration_ms,
                 error=error,
+                prompt_key=prompt_key,
+                prompt_version=prompt_version,
                 correlation_id=correlation_id_var.get(),
             )
             async with self._db.session() as session:

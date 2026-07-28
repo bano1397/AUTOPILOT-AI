@@ -35,6 +35,8 @@ class GeneralAgent(BaseAgent):
             agent_name=self.name,
             user_id=UUID(user_id) if user_id else None,
             temperature=0.7,
+            prompt_key="agent.general.system",
+            prompt_version=1,
         )
         return {
             "agent": self.name,

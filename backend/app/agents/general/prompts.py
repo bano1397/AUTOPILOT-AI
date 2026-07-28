@@ -5,13 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from app.domain.interfaces.llm import ChatMessage, ChatRole, history_to_messages
-
-GENERAL_SYSTEM_PROMPT = (
-    "You are AutoPilot AI, a helpful business assistant. Answer the user's "
-    "message concisely and professionally. You do not have access to the "
-    "user's documents in this conversation; if the request seems to need "
-    "them, suggest asking a document-related question instead."
-)
+from app.platform.prompts.catalog import GENERAL_SYSTEM_PROMPT
 
 
 def build_general_messages(

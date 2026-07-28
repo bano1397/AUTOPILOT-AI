@@ -27,12 +27,12 @@ services:
         value: qdrant
       - key: CHROMA_COLLECTION
         value: autopilot_documents
+      - key: STORAGE_PROVIDER
+        value: s3
       - key: DOCUMENTS_DIR
         value: /data/documents
       - key: CHECKPOINT_DB_PATH
         value: /data/workflow_checkpoints.db
-      - key: JWT_SECRET_KEY
-        generateValue: true
       # ── Set these in the Render dashboard (Environment tab) ──
       - key: DATABASE_URL # Neon: postgresql+asyncpg://…?ssl=require
         sync: false
@@ -45,4 +45,12 @@ services:
       - key: QDRANT_URL
         sync: false
       - key: QDRANT_API_KEY
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ENDPOINT_URL # R2: https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
         sync: false

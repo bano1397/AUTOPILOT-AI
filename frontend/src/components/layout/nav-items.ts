@@ -6,10 +6,12 @@ import {
   FileText,
   LayoutDashboard,
   ListTodo,
+  Mail,
   type LucideIcon,
   Settings,
   Sparkles,
   Workflow,
+  Wrench,
 } from "lucide-react";
 
 export interface NavItem {
@@ -39,11 +41,13 @@ export const navGroups: NavGroup[] = [
   {
     label: "Workspace",
     items: [
+      { href: "/emails", label: "Email", icon: Mail },
       { href: "/documents", label: "Documents", icon: FileText },
       { href: "/knowledge", label: "Knowledge", icon: BookOpen },
       { href: "/agents", label: "Agents", icon: Bot },
       { href: "/tasks", label: "Tasks", icon: ListTodo },
       { href: "/workflows", label: "Workflows", icon: Workflow },
+      { href: "/tools", label: "Tools", icon: Wrench },
       {
         href: "/approvals",
         label: "Approvals",

@@ -104,9 +104,13 @@ class Settings(BaseSettings):
     # Which implementation backs each port. Defaults keep everything local
     # (Ollama + Chroma); the cloud values (groq / jina / qdrant) are selected by
     # env for a free managed deployment — no code change required.
-    llm_provider: str = "ollama"  # ollama | groq
-    embedding_provider: str = "ollama"  # ollama | jina
-    vector_store_provider: str = "chroma"  # chroma | qdrant
+    # The stub / memory values run the whole platform with no model server and
+    # no network, for the demo stack and the e2e suite. They produce fixed,
+    # unintelligent output — never select them in a deployment meant to be
+    # useful. See app/infrastructure/llm/stub.py.
+    llm_provider: str = "ollama"  # ollama | groq | stub
+    embedding_provider: str = "ollama"  # ollama | jina | stub
+    vector_store_provider: str = "chroma"  # chroma | qdrant | memory
     # Vector dimension of the embedding model; sizes the Qdrant collection.
     # nomic-embed-text and jina-embeddings-v3 (via `dimensions`) are both 768.
     embedding_dim: int = 768

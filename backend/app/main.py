@@ -33,11 +33,23 @@ from app.features.scheduler.manager import SchedulerManager
 from app.features.system.router import router as system_router
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
 from app.infrastructure.email import ImapEmailReader, SmtpEmailSender
-from app.infrastructure.embeddings import JinaEmbeddingProvider, OllamaEmbeddingProvider
-from app.infrastructure.llm import GroqLLMProvider, OllamaLLMProvider
+from app.infrastructure.embeddings import (
+    JinaEmbeddingProvider,
+    OllamaEmbeddingProvider,
+    StubEmbeddingProvider,
+)
+from app.infrastructure.llm import (
+    GroqLLMProvider,
+    OllamaLLMProvider,
+    StubLLMProvider,
+)
 from app.infrastructure.search import DuckDuckGoSearchProvider
 from app.infrastructure.storage import LocalStorageProvider, S3StorageProvider
-from app.infrastructure.vectorstore import ChromaVectorStore, QdrantVectorStore
+from app.infrastructure.vectorstore import (
+    ChromaVectorStore,
+    InMemoryVectorStore,
+    QdrantVectorStore,
+)
 from app.mcp import discover_mcp_tools
 from app.platform.events import InProcessEventBus
 from app.platform.observability.recorder import AiExecutionRecorder
@@ -46,7 +58,9 @@ from app.workflows.checkpointer import WorkflowCheckpointer
 
 
 def _build_llm(settings: Settings) -> LLMProvider:
-    """Select the LLM provider from config (local Ollama or cloud Groq)."""
+    """Select the LLM provider from config (Ollama, Groq, or the stub)."""
+    if settings.llm_provider == "stub":
+        return StubLLMProvider()
     if settings.llm_provider == "groq":
         if not settings.groq_api_key:
             raise ValueError("LLM_PROVIDER=groq requires GROQ_API_KEY")
@@ -59,7 +73,9 @@ def _build_llm(settings: Settings) -> LLMProvider:
 
 
 def _build_embeddings(settings: Settings) -> EmbeddingProvider:
-    """Select the embedding provider from config (local Ollama or cloud Jina)."""
+    """Select the embedding provider from config (Ollama, Jina, or the stub)."""
+    if settings.embedding_provider == "stub":
+        return StubEmbeddingProvider(dimensions=settings.embedding_dim)
     if settings.embedding_provider == "jina":
         if not settings.jina_api_key:
             raise ValueError("EMBEDDING_PROVIDER=jina requires JINA_API_KEY")
@@ -131,11 +147,13 @@ def _build_storage(settings: Settings) -> StorageProvider:
 
 
 def _build_vector_store(settings: Settings, collection: str) -> VectorStoreProvider:
-    """Select the vector store from config (local Chroma or cloud Qdrant).
+    """Select the vector store from config (Chroma, Qdrant, or in-process).
 
     ``collection`` names the namespace: document chunks and long-term memory
     each get their own, so neither can contaminate the other's search results.
     """
+    if settings.vector_store_provider == "memory":
+        return InMemoryVectorStore()
     if settings.vector_store_provider == "qdrant":
         if not settings.qdrant_url:
             raise ValueError("VECTOR_STORE_PROVIDER=qdrant requires QDRANT_URL")

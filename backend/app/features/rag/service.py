@@ -112,6 +112,8 @@ class RagAskService:
                 agent_name=agent_name,
                 user_id=user_id,
                 temperature=0.2,
+                prompt_key="rag.ask.system",
+                prompt_version=1,
             )
         except Exception as exc:
             logger.warning("rag.ask_llm_failed", extra={"error": str(exc)})

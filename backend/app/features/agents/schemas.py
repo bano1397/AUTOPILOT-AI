@@ -21,7 +21,8 @@ class AgentAskRequest(BaseModel):
 
     message: str = Field(min_length=1, max_length=4000)
     conversation_id: UUID | None = None
-    require_approval: bool = False
+    # None means "use the workspace's require_approval_by_default preference".
+    require_approval: bool | None = None
 
 
 class WebSourceRead(BaseModel):

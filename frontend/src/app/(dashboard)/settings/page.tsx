@@ -6,6 +6,7 @@ import {
   type LucideIcon,
   Palette,
   Server,
+  SlidersHorizontal,
   User as UserIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -14,16 +15,27 @@ import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  usePreferences,
+  useUpdatePreferences,
+} from "@/features/preferences/hooks";
 import { useHealth } from "@/features/system/hooks";
-import { useAuthStore } from "@/lib/auth/store";
+import { useWorkspaceUser } from "@/features/workspace/hooks";
 import { API_URL } from "@/lib/config";
 import { cn } from "@/lib/utils";
 
-type Section = "profile" | "appearance" | "models" | "system" | "about";
+type Section =
+  | "profile"
+  | "appearance"
+  | "workspace"
+  | "models"
+  | "system"
+  | "about";
 
 const NAV: { key: Section; label: string; icon: LucideIcon }[] = [
   { key: "profile", label: "Profile", icon: UserIcon },
   { key: "appearance", label: "Appearance", icon: Palette },
+  { key: "workspace", label: "Workspace", icon: SlidersHorizontal },
   { key: "models", label: "AI Models", icon: Cpu },
   { key: "system", label: "System", icon: Server },
   { key: "about", label: "About", icon: Info },
@@ -52,8 +64,10 @@ function Row({
 
 export default function SettingsPage() {
   const [section, setSection] = useState<Section>("profile");
-  const user = useAuthStore((state) => state.user);
+  const { data: user } = useWorkspaceUser();
   const { theme, setTheme } = useTheme();
+  const preferences = usePreferences();
+  const savePreferences = useUpdatePreferences();
   const health = useHealth();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -63,7 +77,7 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
-          Manage your account, appearance, and platform configuration.
+          Appearance and platform configuration for this workspace.
         </p>
       </div>
 
@@ -98,28 +112,18 @@ export default function SettingsPage() {
               <CardContent>
                 <div className="mb-4 flex items-center gap-3">
                   <Avatar className="size-12">
-                    <AvatarFallback>
-                      {user?.email?.[0]?.toUpperCase() ?? "?"}
-                    </AvatarFallback>
+                    <AvatarFallback>AP</AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium">{user?.email ?? "…"}</p>
+                    <p className="font-medium">Shared workspace</p>
                     <p className="text-xs text-muted-foreground">
-                      AutoPilot AI account
+                      Open instance · no sign-in
                     </p>
                   </div>
                 </div>
-                <Row label="Email">{user?.email ?? "…"}</Row>
-                <Row label="Role">
-                  {user?.role ? (
-                    <Badge
-                      variant={user.role === "admin" ? "default" : "secondary"}
-                    >
-                      {user.role}
-                    </Badge>
-                  ) : (
-                    "…"
-                  )}
+                <Row label="Workspace ID">{user?.email ?? "…"}</Row>
+                <Row label="Access">
+                  <Badge variant="secondary">Open — no authentication</Badge>
                 </Row>
               </CardContent>
             </Card>
@@ -132,14 +136,20 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <p className="mb-3 text-sm text-muted-foreground">
-                  Choose your preferred theme.
+                  Choose your preferred theme. The choice is saved to the
+                  workspace, so any browser opening this instance restores it.
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   {THEMES.map((option) => (
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => setTheme(option.value)}
+                      onClick={() => {
+                        setTheme(option.value);
+                        savePreferences.mutate({
+                          theme: option.value as "light" | "dark" | "system",
+                        });
+                      }}
                       className={cn(
                         "rounded-lg border px-4 py-3 text-sm font-medium transition-colors",
                         mounted && theme === option.value
@@ -151,6 +161,68 @@ export default function SettingsPage() {
                     </button>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {section === "workspace" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Workspace defaults</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Applied whenever a request does not specify its own value.
+                  Saved for the whole instance.
+                </p>
+                <Row label="Retrieved passages (top-k)">
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    aria-label="Default number of retrieved passages"
+                    value={preferences.data?.default_top_k ?? 5}
+                    onChange={(event) =>
+                      savePreferences.mutate({
+                        default_top_k: Number(event.target.value),
+                      })
+                    }
+                    className="h-8 w-20 rounded-md border bg-background px-2 text-sm"
+                  />
+                </Row>
+                <Row label="Require approval by default">
+                  <input
+                    type="checkbox"
+                    aria-label="Require approval by default"
+                    checked={
+                      preferences.data?.require_approval_by_default ?? false
+                    }
+                    onChange={(event) =>
+                      savePreferences.mutate({
+                        require_approval_by_default: event.target.checked,
+                      })
+                    }
+                    className="size-4 accent-primary"
+                  />
+                </Row>
+                <Row label="In-app notifications">
+                  <input
+                    type="checkbox"
+                    aria-label="Enable in-app notifications"
+                    checked={preferences.data?.notifications_enabled ?? true}
+                    onChange={(event) =>
+                      savePreferences.mutate({
+                        notifications_enabled: event.target.checked,
+                      })
+                    }
+                    className="size-4 accent-primary"
+                  />
+                </Row>
+                {savePreferences.isError && (
+                  <p role="alert" className="mt-3 text-sm text-destructive">
+                    Could not save that change.
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}

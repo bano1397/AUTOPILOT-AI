@@ -1,4 +1,4 @@
-"""Analytics HTTP endpoints (authenticated, owner-scoped)."""
+"""Analytics HTTP endpoints (workspace-scoped)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from app.core.dependencies import get_db_session
 from app.core.schemas import ApiResponse
 from app.features.analytics.schemas import AnalyticsOverviewRead
 from app.features.analytics.service import AnalyticsService
-from app.features.auth.dependencies import get_current_user
+from app.features.users.dependencies import get_workspace_user
 from app.features.users.models import User
 
 router = APIRouter()
@@ -24,8 +24,8 @@ def get_analytics_service(
 @router.get("/overview", response_model=ApiResponse[AnalyticsOverviewRead])
 async def overview(
     days: int = Query(default=30, ge=1, le=90),
-    current_user: User = Depends(get_current_user),
+    workspace_user: User = Depends(get_workspace_user),
     service: AnalyticsService = Depends(get_analytics_service),
 ) -> ApiResponse[AnalyticsOverviewRead]:
-    data = await service.overview(current_user.id, days=days)
+    data = await service.overview(workspace_user.id, days=days)
     return ApiResponse(data=data)

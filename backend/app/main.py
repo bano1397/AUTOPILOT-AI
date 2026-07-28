@@ -21,10 +21,10 @@ from app.core.config import Settings, get_settings
 from app.core.error_handlers import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
 from app.core.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
-from app.core.ratelimit import InMemoryRateLimiter
 from app.domain.events import DocumentUploaded, DomainEvent
 from app.domain.interfaces.embedding import EmbeddingProvider
 from app.domain.interfaces.llm import LLMProvider
+from app.domain.interfaces.storage import StorageProvider
 from app.domain.interfaces.vector_store import VectorStoreProvider
 from app.features.documents.ingestion import IngestionService
 from app.features.notifications.subscribers import register_notification_subscribers
@@ -32,11 +32,13 @@ from app.features.scheduler.jobs import register_scheduled_jobs
 from app.features.scheduler.manager import SchedulerManager
 from app.features.system.router import router as system_router
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
+from app.infrastructure.email import ImapEmailReader, SmtpEmailSender
 from app.infrastructure.embeddings import JinaEmbeddingProvider, OllamaEmbeddingProvider
 from app.infrastructure.llm import GroqLLMProvider, OllamaLLMProvider
 from app.infrastructure.search import DuckDuckGoSearchProvider
-from app.infrastructure.storage import LocalStorageProvider
+from app.infrastructure.storage import LocalStorageProvider, S3StorageProvider
 from app.infrastructure.vectorstore import ChromaVectorStore, QdrantVectorStore
+from app.mcp import discover_mcp_tools
 from app.platform.events import InProcessEventBus
 from app.platform.observability.recorder import AiExecutionRecorder
 from app.platform.registry import discover_plugins
@@ -69,6 +71,63 @@ def _build_embeddings(settings: Settings) -> EmbeddingProvider:
     return OllamaEmbeddingProvider(
         base_url=settings.ollama_base_url, model=settings.embedding_model
     )
+
+
+def _build_email_reader(settings: Settings) -> ImapEmailReader | None:
+    """IMAP reader, or None when no mailbox is configured."""
+    if not (settings.imap_host and settings.imap_username and settings.imap_password):
+        return None
+    return ImapEmailReader(
+        host=settings.imap_host,
+        port=settings.imap_port,
+        username=settings.imap_username,
+        password=settings.imap_password,
+        mailbox=settings.imap_mailbox,
+        use_ssl=settings.imap_use_ssl,
+    )
+
+
+def _build_email_sender(settings: Settings) -> SmtpEmailSender | None:
+    """SMTP sender, or None when no outbound mail is configured."""
+    if not (settings.smtp_host and settings.smtp_from):
+        return None
+    return SmtpEmailSender(
+        host=settings.smtp_host,
+        port=settings.smtp_port,
+        sender=settings.smtp_from,
+        username=settings.smtp_username,
+        password=settings.smtp_password,
+    )
+
+
+def _build_storage(settings: Settings) -> StorageProvider:
+    """Select file storage from config (local disk or an S3-compatible bucket)."""
+    if settings.storage_provider == "s3":
+        missing = [
+            name
+            for name, value in (
+                ("S3_BUCKET", settings.s3_bucket),
+                ("S3_ENDPOINT_URL", settings.s3_endpoint_url),
+                ("S3_ACCESS_KEY_ID", settings.s3_access_key_id),
+                ("S3_SECRET_ACCESS_KEY", settings.s3_secret_access_key),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(
+                "STORAGE_PROVIDER=s3 requires " + ", ".join(missing)
+            )
+        # The checks above narrow these to str for the type checker.
+        assert settings.s3_bucket and settings.s3_endpoint_url  # noqa: S101
+        assert settings.s3_access_key_id and settings.s3_secret_access_key  # noqa: S101
+        return S3StorageProvider(
+            bucket=settings.s3_bucket,
+            endpoint_url=settings.s3_endpoint_url,
+            access_key_id=settings.s3_access_key_id,
+            secret_access_key=settings.s3_secret_access_key,
+            region=settings.s3_region,
+        )
+    return LocalStorageProvider(settings.documents_dir)
 
 
 def _build_vector_store(settings: Settings) -> VectorStoreProvider:
@@ -104,6 +163,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         # Import plugin modules so their registration decorators execute.
         discovered = discover_plugins()
+        # Remote MCP tools join the same registry as native ones. Config-gated
+        # and failure-isolated: an unreachable server never blocks boot.
+        mcp_summary = await discover_mcp_tools(settings.mcp_servers)
         # Workflow pause/resume state (LangGraph checkpoints).
         await checkpointer.start()
         # Recurring jobs need the running event loop, hence started here.
@@ -115,6 +177,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "version": settings.app_version,
                 "environment": settings.environment.value,
                 "plugins_discovered": discovered,
+                "mcp_servers": mcp_summary["servers"],
+                "mcp_tools": mcp_summary["tools"],
             },
         )
         yield
@@ -133,16 +197,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.event_bus = event_bus
     app.state.db = db
-    app.state.storage = LocalStorageProvider(settings.documents_dir)
+    app.state.storage = _build_storage(settings)
     app.state.embeddings = _build_embeddings(settings)
     app.state.vector_store = _build_vector_store(settings)
     app.state.llm = _build_llm(settings)
     app.state.search = DuckDuckGoSearchProvider()
+    app.state.email_reader = _build_email_reader(settings)
+    app.state.email_sender = _build_email_sender(settings)
     # Every LLM call goes through the recorder so it is audited (tokens, cost,
     # timing, errors) and emits CostRecorded.
     app.state.ai_recorder = AiExecutionRecorder(db=db, bus=event_bus)
     app.state.checkpointer = checkpointer
-    app.state.rate_limiter = InMemoryRateLimiter()
 
     # Event-driven ingestion: providers are resolved from app.state at event
     # time, so swapping them (tests, alternative backends) needs no re-wiring.

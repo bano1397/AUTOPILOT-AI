@@ -1,21 +1,25 @@
-"""Integration tests for the scheduler and the daily digest job."""
+"""Integration tests for the scheduler and the daily digest job.
+
+Endpoints are open (``docs/COMPLETION_PLAN.md`` §3), so the former admin-gating
+cases are replaced by one open-access check. Digest behavior — who gets a digest
+and what it says — is unchanged and still the substance of this file.
+"""
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from uuid import UUID
 
 import pytest_asyncio
-from app.core.security import hash_password
 from app.features.documents.models import Document, DocumentStatus
 from app.features.scheduler.jobs import DAILY_DIGEST_JOB_ID
-from app.features.users.models import User, UserRole
+from app.features.users.models import User
 from app.features.workflows.models import WorkflowRun, WorkflowRunStatus
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-_ADMIN = ("admin@example.com", "adminpass1")
-_USER = ("user@example.com", "userpass12")
+from tests.helpers import workspace_user_id
 
 
 @pytest_asyncio.fixture
@@ -32,44 +36,26 @@ async def api(
     app.state.scheduler.shutdown()
 
 
-async def _seed_and_login(
-    api: AsyncClient,
-    db: SqlAlchemyDatabaseProvider,
-    email: str,
-    password: str,
-    role: UserRole = UserRole.USER,
-) -> str:
+async def _seed_quiet_user(db: SqlAlchemyDatabaseProvider) -> None:
+    """A second user with no activity — the digest must skip them."""
     async with db.session() as session:
-        session.add(
-            User(email=email, password_hash=hash_password(password), role=role)
-        )
+        session.add(User(email="quiet@example.com"))
         await session.commit()
-    response = await api.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
-    )
-    return str(response.json()["data"]["access_token"])
 
 
-def _auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
-
-
-async def _seed_activity(db: SqlAlchemyDatabaseProvider, email: str) -> None:
-    """Give a user one completed run, one failed run, and one indexed document."""
+async def _seed_activity(db: SqlAlchemyDatabaseProvider, user_id: UUID) -> None:
+    """One completed run, one failed run, and one indexed document."""
     async with db.session() as session:
-        user = User(email=email, password_hash=hash_password("password12"))
-        session.add(user)
-        await session.flush()
         session.add(
             WorkflowRun(
-                user_id=user.id,
+                user_id=user_id,
                 workflow_name="agents.ask",
                 status=WorkflowRunStatus.COMPLETED,
             )
         )
         session.add(
             WorkflowRun(
-                user_id=user.id,
+                user_id=user_id,
                 workflow_name="agents.ask",
                 status=WorkflowRunStatus.FAILED,
                 error="boom",
@@ -77,7 +63,7 @@ async def _seed_activity(db: SqlAlchemyDatabaseProvider, email: str) -> None:
         )
         session.add(
             Document(
-                user_id=user.id,
+                user_id=user_id,
                 filename="notes.txt",
                 mime_type="text/plain",
                 size_bytes=10,
@@ -89,24 +75,15 @@ async def _seed_activity(db: SqlAlchemyDatabaseProvider, email: str) -> None:
         await session.commit()
 
 
-async def test_jobs_listing_is_admin_only(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider
-) -> None:
-    user_token = await _seed_and_login(api, db, *_USER)
+async def test_jobs_listing_is_open(api: AsyncClient) -> None:
+    response = await api.get("/api/v1/scheduler/jobs")
 
-    anonymous = await api.get("/api/v1/scheduler/jobs")
-    non_admin = await api.get("/api/v1/scheduler/jobs", headers=_auth(user_token))
-
-    assert anonymous.status_code == 401
-    assert non_admin.status_code == 403
+    assert response.status_code == 200
+    assert response.json()["success"] is True
 
 
-async def test_jobs_listing_shows_daily_digest(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider
-) -> None:
-    token = await _seed_and_login(api, db, *_ADMIN, role=UserRole.ADMIN)
-
-    response = await api.get("/api/v1/scheduler/jobs", headers=_auth(token))
+async def test_jobs_listing_shows_daily_digest(api: AsyncClient) -> None:
+    response = await api.get("/api/v1/scheduler/jobs")
 
     assert response.status_code == 200
     jobs = {job["id"]: job for job in response.json()["data"]}
@@ -116,28 +93,23 @@ async def test_jobs_listing_shows_daily_digest(
     assert digest["paused"] is False
 
 
-async def test_run_digest_sends_notifications_for_active_users(
+async def test_run_digest_sends_notifications_only_for_active_users(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    admin_token = await _seed_and_login(api, db, *_ADMIN, role=UserRole.ADMIN)
-    await _seed_activity(db, "busy@example.com")
+    workspace_id = await workspace_user_id(db)
+    await _seed_activity(db, workspace_id)
+    await _seed_quiet_user(db)
 
-    response = await api.post(
-        f"/api/v1/scheduler/jobs/{DAILY_DIGEST_JOB_ID}/run", headers=_auth(admin_token)
-    )
+    response = await api.post(f"/api/v1/scheduler/jobs/{DAILY_DIGEST_JOB_ID}/run")
 
     assert response.status_code == 200
     summary = response.json()["data"]["summary"]
-    assert summary["users_checked"] == 2  # admin + busy user
-    assert summary["digests_sent"] == 1  # only the user with activity
+    assert summary["users_checked"] == 2  # workspace identity + quiet user
+    assert summary["digests_sent"] == 1  # only the one with activity
 
-    # The digest landed as an in-app notification with the right numbers.
-    busy_login = await api.post(
-        "/api/v1/auth/login",
-        json={"email": "busy@example.com", "password": "password12"},
-    )
-    busy_token = str(busy_login.json()["data"]["access_token"])
-    notifications = await api.get("/api/v1/notifications", headers=_auth(busy_token))
+    # The digest landed as an in-app notification with the right numbers. The
+    # request runs as the workspace identity, so this reads its own inbox.
+    notifications = await api.get("/api/v1/notifications")
     items = notifications.json()["data"]
     assert len(items) == 1
     assert items[0]["type"] == "daily_digest"
@@ -145,38 +117,32 @@ async def test_run_digest_sends_notifications_for_active_users(
     assert "1 failed" in items[0]["body"]
     assert "1 document(s) indexed" in items[0]["body"]
 
-    # The quiet admin got nothing.
-    own = await api.get("/api/v1/notifications", headers=_auth(admin_token))
-    assert own.json()["data"] == []
 
-
-async def test_pause_and_resume_job(
+async def test_run_digest_with_no_activity_sends_nothing(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    token = await _seed_and_login(api, db, *_ADMIN, role=UserRole.ADMIN)
+    await workspace_user_id(db)
 
-    paused = await api.post(
-        f"/api/v1/scheduler/jobs/{DAILY_DIGEST_JOB_ID}/pause", headers=_auth(token)
-    )
+    response = await api.post(f"/api/v1/scheduler/jobs/{DAILY_DIGEST_JOB_ID}/run")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["summary"]["digests_sent"] == 0
+    assert (await api.get("/api/v1/notifications")).json()["data"] == []
+
+
+async def test_pause_and_resume_job(api: AsyncClient) -> None:
+    paused = await api.post(f"/api/v1/scheduler/jobs/{DAILY_DIGEST_JOB_ID}/pause")
     assert paused.status_code == 200
-    listing = await api.get("/api/v1/scheduler/jobs", headers=_auth(token))
+    listing = await api.get("/api/v1/scheduler/jobs")
     assert listing.json()["data"][0]["paused"] is True
 
-    resumed = await api.post(
-        f"/api/v1/scheduler/jobs/{DAILY_DIGEST_JOB_ID}/resume", headers=_auth(token)
-    )
+    resumed = await api.post(f"/api/v1/scheduler/jobs/{DAILY_DIGEST_JOB_ID}/resume")
     assert resumed.status_code == 200
-    listing = await api.get("/api/v1/scheduler/jobs", headers=_auth(token))
+    listing = await api.get("/api/v1/scheduler/jobs")
     assert listing.json()["data"][0]["paused"] is False
 
 
-async def test_unknown_job_returns_404(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider
-) -> None:
-    token = await _seed_and_login(api, db, *_ADMIN, role=UserRole.ADMIN)
-
-    response = await api.post(
-        "/api/v1/scheduler/jobs/nope/run", headers=_auth(token)
-    )
+async def test_unknown_job_returns_404(api: AsyncClient) -> None:
+    response = await api.post("/api/v1/scheduler/jobs/nope/run")
 
     assert response.status_code == 404

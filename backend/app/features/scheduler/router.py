@@ -1,4 +1,9 @@
-"""Scheduler HTTP endpoints (admin-only)."""
+"""Scheduler HTTP endpoints.
+
+Open, like the rest of the API — there is no authentication or role model (see
+``docs/COMPLETION_PLAN.md`` §3). The deterministic "run now" endpoint is an
+intentional affordance of the open instance.
+"""
 
 from __future__ import annotations
 
@@ -7,11 +12,10 @@ from typing import cast
 from fastapi import APIRouter, Depends, Request
 
 from app.core.schemas import ApiResponse, MessageResponse
-from app.features.auth.dependencies import require_admin
 from app.features.scheduler.manager import SchedulerManager
 from app.features.scheduler.schemas import JobRunRead, ScheduledJobRead
 
-router = APIRouter(dependencies=[Depends(require_admin)])
+router = APIRouter()
 
 
 def get_scheduler_manager(request: Request) -> SchedulerManager:

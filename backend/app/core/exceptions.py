@@ -37,18 +37,6 @@ class ConflictError(AppError):
     message = "Resource conflict"
 
 
-class AuthenticationError(AppError):
-    code = "AUTHENTICATION_FAILED"
-    status_code = 401
-    message = "Authentication failed"
-
-
-class PermissionDeniedError(AppError):
-    code = "PERMISSION_DENIED"
-    status_code = 403
-    message = "You do not have permission to perform this action"
-
-
 class ValidationAppError(AppError):
     code = "VALIDATION_ERROR"
     status_code = 422
@@ -71,9 +59,3 @@ class UpstreamServiceError(AppError):
     code = "UPSTREAM_SERVICE_ERROR"
     status_code = 502
     message = "An upstream service is unavailable"
-
-
-class RateLimitedError(AppError):
-    code = "RATE_LIMITED"
-    status_code = 429
-    message = "Too many requests"

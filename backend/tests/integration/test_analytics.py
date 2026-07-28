@@ -6,18 +6,15 @@ from collections.abc import AsyncIterator
 from uuid import UUID
 
 import pytest_asyncio
-from app.core.security import hash_password
 from app.features.documents.models import Document, DocumentStatus
 from app.features.tasks.models import Task, TaskPriority
-from app.features.users.models import User
 from app.features.workflows.models import WorkflowRun, WorkflowRunStatus
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
 from app.platform.observability.models import AiExecution
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-_ALICE = ("alice@example.com", "alicepass1")
-_BOB = ("bob@example.com", "bobpass123")
+from tests.helpers import workspace_user_id
 
 
 @pytest_asyncio.fixture
@@ -28,25 +25,6 @@ async def api(
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
-
-
-async def _seed_user(db: SqlAlchemyDatabaseProvider, email: str, password: str) -> UUID:
-    async with db.session() as session:
-        user = User(email=email, password_hash=hash_password(password))
-        session.add(user)
-        await session.commit()
-        return user.id
-
-
-async def _login(api: AsyncClient, email: str, password: str) -> str:
-    response = await api.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
-    )
-    return str(response.json()["data"]["access_token"])
-
-
-def _auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
 
 
 async def _seed_executions(db: SqlAlchemyDatabaseProvider, user_id: UUID) -> None:
@@ -102,18 +80,13 @@ async def _seed_executions(db: SqlAlchemyDatabaseProvider, user_id: UUID) -> Non
         await session.commit()
 
 
-async def test_overview_requires_authentication(api: AsyncClient) -> None:
-    assert (await api.get("/api/v1/analytics/overview")).status_code == 401
-
-
 async def test_overview_aggregates_usage(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    user_id = await _seed_user(db, *_ALICE)
+    user_id = await workspace_user_id(db)
     await _seed_executions(db, user_id)
-    token = await _login(api, *_ALICE)
 
-    response = await api.get("/api/v1/analytics/overview?days=30", headers=_auth(token))
+    response = await api.get("/api/v1/analytics/overview?days=30")
 
     assert response.status_code == 200
     data = response.json()["data"]
@@ -145,27 +118,8 @@ async def test_overview_aggregates_usage(
     assert {s["status"]: s["count"] for s in entities["tasks"]} == {"todo": 1}
 
 
-async def test_overview_is_owner_scoped(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider
-) -> None:
-    alice_id = await _seed_user(db, *_ALICE)
-    await _seed_executions(db, alice_id)
-    await _seed_user(db, *_BOB)
-    bob_token = await _login(api, *_BOB)
-
-    response = await api.get("/api/v1/analytics/overview", headers=_auth(bob_token))
-
-    data = response.json()["data"]
-    assert data["totals"]["executions"] == 0
-    assert data["by_feature"] == []
-    assert data["entities"]["documents_indexed"] == 0
-
-
 async def test_days_bounds_are_validated(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    await _seed_user(db, *_ALICE)
-    token = await _login(api, *_ALICE)
-
-    too_many = await api.get("/api/v1/analytics/overview?days=999", headers=_auth(token))
+    too_many = await api.get("/api/v1/analytics/overview?days=999")
     assert too_many.status_code == 422

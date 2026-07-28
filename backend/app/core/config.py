@@ -72,21 +72,29 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./autopilot.db"
     db_echo: bool = False
 
-    # --- Security / JWT ---------------------------------------------------
-    # MUST be overridden in every non-local environment via JWT_SECRET_KEY.
-    # Default is >= 32 bytes to satisfy HS256 key-length recommendations.
-    jwt_secret_key: str = "change-me-in-production-set-a-secure-random-secret"  # noqa: S105
-    jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 15
-    refresh_token_expire_days: int = 7
-    # Per-IP sliding-window limit on login/register/refresh.
-    auth_rate_limit_per_minute: int = 10
+    # --- Security ----------------------------------------------------------
+    # There is no authentication (docs/COMPLETION_PLAN.md §3), so there are no
+    # JWT, session, or auth rate-limit settings. Security headers are still
+    # applied by middleware, and HSTS is enabled in production only.
 
     # --- Documents / file storage ------------------------------------------
-    # Base directory for uploaded files. Outside the webroot; in Docker this is
-    # the mounted `documents` volume.
+    # Which implementation backs the StorageProvider port. `local` keeps files
+    # on disk (ephemeral on free PaaS tiers); `s3` puts them in any
+    # S3-compatible bucket (Cloudflare R2, AWS S3, MinIO) so they survive
+    # restarts.
+    storage_provider: str = "local"  # local | s3
+    # Base directory for uploaded files when storage_provider=local. Outside the
+    # webroot; in Docker this is the mounted `documents` volume.
     documents_dir: str = "./documents"
     max_upload_size_mb: int = 25
+
+    # S3-compatible object storage (used when storage_provider=s3).
+    s3_bucket: str | None = None
+    s3_endpoint_url: str | None = None
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    # R2 accepts the literal "auto"; AWS requires a real region name.
+    s3_region: str = "auto"
 
     # --- RAG / ingestion -----------------------------------------------------
     chunk_size: int = 1000
@@ -122,6 +130,25 @@ class Settings(BaseSettings):
     # Cloud vector store (Qdrant — free managed tier)
     qdrant_url: str | None = None
     qdrant_api_key: str | None = None
+
+    # --- Email (IMAP in, SMTP out) ----------------------------------------
+    # Mailbox reading is enabled when host + username + password are all set;
+    # sending reuses the SMTP_* settings below. Both are optional: without them
+    # the emails API still serves reads and returns a clear 502 on sync/send.
+    imap_host: str | None = None
+    imap_port: int = 993
+    imap_username: str | None = None
+    imap_password: str | None = None
+    imap_mailbox: str = "INBOX"
+    imap_use_ssl: bool = True
+
+    # --- MCP (Model Context Protocol) -------------------------------------
+    # JSON array of servers to consume tools from. This is the allow-list: only
+    # servers named here are ever contacted. Example:
+    #   [{"name": "files", "transport": "stdio",
+    #     "command": "mcp-server-filesystem", "args": ["/data"]}]
+    #   [{"name": "remote", "transport": "http", "url": "https://host/mcp"}]
+    mcp_servers: str | None = None
 
     # --- Workflows -------------------------------------------------------
     # SQLite file backing LangGraph checkpoints (pause/resume state).

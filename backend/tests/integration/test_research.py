@@ -7,9 +7,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from app.core.security import hash_password
 from app.domain.interfaces.search import SearchResult
-from app.features.users.models import User
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
 from app.infrastructure.storage import LocalStorageProvider
 from app.platform.observability import AiExecution, AiExecutionRecorder
@@ -23,8 +21,6 @@ from tests.fakes import (
     FakeSearchProvider,
     FakeVectorStore,
 )
-
-_ALICE = ("alice@example.com", "alicepass1")
 
 _RESULTS = [
     SearchResult(
@@ -78,33 +74,16 @@ async def api(
         yield client
 
 
-async def _seed_and_login(api: AsyncClient, db: SqlAlchemyDatabaseProvider) -> str:
-    email, password = _ALICE
-    async with db.session() as session:
-        session.add(User(email=email, password_hash=hash_password(password)))
-        await session.commit()
-    response = await api.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
-    )
-    return str(response.json()["data"]["access_token"])
-
-
-def _auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
-
-
 async def test_research_question_routes_and_cites_web_sources(
     api: AsyncClient,
     db: SqlAlchemyDatabaseProvider,
     fake_llm: FakeLLMProvider,
     fake_search: FakeSearchProvider,
 ) -> None:
-    token = await _seed_and_login(api, db)
     fake_llm.replies = ["research", "LangGraph 1.2 adds durable checkpoints [1]."]
 
     response = await api.post(
         "/api/v1/agents/ask",
-        headers=_auth(token),
         json={"message": "what is the latest LangGraph release?"},
     )
 
@@ -130,13 +109,12 @@ async def test_research_question_routes_and_cites_web_sources(
 async def test_explicit_research_command_fast_routes_without_classifier(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider, fake_llm: FakeLLMProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
     # "research ..." is deterministically fast-routed: the classifier LLM call
     # is skipped entirely, so the only scripted reply is the synthesis.
     fake_llm.replies = ["Answer [1]."]
 
     response = await api.post(
-        "/api/v1/agents/ask", headers=_auth(token), json={"message": "research X"}
+        "/api/v1/agents/ask", json={"message": "research X"}
     )
     assert response.status_code == 200
     assert response.json()["data"]["agent"] == "research"
@@ -154,11 +132,10 @@ async def test_research_with_no_results_answers_honestly(
     fake_llm: FakeLLMProvider,
     fake_search: FakeSearchProvider,
 ) -> None:
-    token = await _seed_and_login(api, db)
     fake_search.results = []
 
     response = await api.post(
-        "/api/v1/agents/ask", headers=_auth(token), json={"message": "research nothing"}
+        "/api/v1/agents/ask", json={"message": "research nothing"}
     )
 
     assert response.status_code == 200
@@ -176,17 +153,16 @@ async def test_search_outage_fails_run_with_502(
     fake_llm: FakeLLMProvider,
     fake_search: FakeSearchProvider,
 ) -> None:
-    token = await _seed_and_login(api, db)
     fake_search.fail = True
 
     response = await api.post(
-        "/api/v1/agents/ask", headers=_auth(token), json={"message": "research X"}
+        "/api/v1/agents/ask", json={"message": "research X"}
     )
 
     assert response.status_code == 502
     assert "Web search" in response.json()["error"]["message"]
 
-    runs = await api.get("/api/v1/workflows/runs", headers=_auth(token))
+    runs = await api.get("/api/v1/workflows/runs")
     run = runs.json()["data"][0]
     assert run["status"] == "failed"
     assert "Web search" in run["error"]

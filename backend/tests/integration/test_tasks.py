@@ -6,14 +6,9 @@ from collections.abc import AsyncIterator
 from uuid import uuid4
 
 import pytest_asyncio
-from app.core.security import hash_password
-from app.features.users.models import User
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-
-_ALICE = ("alice@example.com", "alicepass1")
-_BOB = ("bob@example.com", "bobpass123")
 
 
 @pytest_asyncio.fixture
@@ -26,31 +21,11 @@ async def api(
         yield client
 
 
-async def _seed_and_login(
-    api: AsyncClient,
-    db: SqlAlchemyDatabaseProvider,
-    email: str = _ALICE[0],
-    password: str = _ALICE[1],
-) -> str:
-    async with db.session() as session:
-        session.add(User(email=email, password_hash=hash_password(password)))
-        await session.commit()
-    response = await api.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
-    )
-    return str(response.json()["data"]["access_token"])
-
-
-def _auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
-
-
 async def _create(
-    api: AsyncClient, token: str, title: str, priority: str = "medium"
+    api: AsyncClient, title: str, priority: str = "medium"
 ) -> dict[str, object]:
     response = await api.post(
         "/api/v1/tasks",
-        headers=_auth(token),
         json={"title": title, "priority": priority},
     )
     assert response.status_code == 201
@@ -60,10 +35,9 @@ async def _create(
 async def test_create_and_list_tasks(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
-    await _create(api, token, "Write report", priority="high")
+    await _create(api, "Write report", priority="high")
 
-    response = await api.get("/api/v1/tasks", headers=_auth(token))
+    response = await api.get("/api/v1/tasks")
 
     assert response.status_code == 200
     body = response.json()
@@ -76,20 +50,18 @@ async def test_create_and_list_tasks(
 
 
 async def test_status_filter(api: AsyncClient, db: SqlAlchemyDatabaseProvider) -> None:
-    token = await _seed_and_login(api, db)
-    first = await _create(api, token, "A")
-    await _create(api, token, "B")
+    first = await _create(api, "A")
+    await _create(api, "B")
 
     patched = await api.patch(
         f"/api/v1/tasks/{first['id']}",
-        headers=_auth(token),
         json={"status": "done"},
     )
     assert patched.status_code == 200
     assert patched.json()["data"]["status"] == "done"
 
-    done = await api.get("/api/v1/tasks?status=done", headers=_auth(token))
-    todo = await api.get("/api/v1/tasks?status=todo", headers=_auth(token))
+    done = await api.get("/api/v1/tasks?status=done")
+    todo = await api.get("/api/v1/tasks?status=todo")
     assert done.json()["meta"]["total"] == 1
     assert todo.json()["meta"]["total"] == 1
     assert done.json()["data"][0]["id"] == first["id"]
@@ -98,12 +70,10 @@ async def test_status_filter(api: AsyncClient, db: SqlAlchemyDatabaseProvider) -
 async def test_partial_update_keeps_other_fields(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
-    task = await _create(api, token, "Original", priority="urgent")
+    task = await _create(api, "Original", priority="urgent")
 
     patched = await api.patch(
         f"/api/v1/tasks/{task['id']}",
-        headers=_auth(token),
         json={"title": "Renamed"},
     )
 
@@ -113,51 +83,29 @@ async def test_partial_update_keeps_other_fields(
 
 
 async def test_delete_task(api: AsyncClient, db: SqlAlchemyDatabaseProvider) -> None:
-    token = await _seed_and_login(api, db)
-    task = await _create(api, token, "Ephemeral")
+    task = await _create(api, "Ephemeral")
 
-    deleted = await api.delete(f"/api/v1/tasks/{task['id']}", headers=_auth(token))
+    deleted = await api.delete(f"/api/v1/tasks/{task['id']}")
     assert deleted.status_code == 200
 
-    listing = await api.get("/api/v1/tasks", headers=_auth(token))
+    listing = await api.get("/api/v1/tasks")
     assert listing.json()["meta"]["total"] == 0
 
 
-async def test_tasks_are_owner_scoped(
+async def test_validation(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    alice = await _seed_and_login(api, db)
-    bob = await _seed_and_login(api, db, *_BOB)
-    task = await _create(api, alice, "Alice's task")
-
-    assert (await api.get("/api/v1/tasks", headers=_auth(bob))).json()["meta"][
-        "total"
-    ] == 0
-    patched = await api.patch(
-        f"/api/v1/tasks/{task['id']}", headers=_auth(bob), json={"status": "done"}
-    )
-    deleted = await api.delete(f"/api/v1/tasks/{task['id']}", headers=_auth(bob))
-    assert patched.status_code == 404
-    assert deleted.status_code == 404
-
-
-async def test_validation_and_auth(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider
-) -> None:
-    token = await _seed_and_login(api, db)
 
     empty_title = await api.post(
-        "/api/v1/tasks", headers=_auth(token), json={"title": ""}
+        "/api/v1/tasks", json={"title": ""}
     )
     bad_priority = await api.post(
-        "/api/v1/tasks", headers=_auth(token), json={"title": "x", "priority": "nope"}
+        "/api/v1/tasks", json={"title": "x", "priority": "nope"}
     )
-    anonymous = await api.get("/api/v1/tasks")
     missing = await api.patch(
-        f"/api/v1/tasks/{uuid4()}", headers=_auth(token), json={"status": "done"}
+        f"/api/v1/tasks/{uuid4()}", json={"status": "done"}
     )
 
     assert empty_title.status_code == 422
     assert bad_priority.status_code == 422
-    assert anonymous.status_code == 401
     assert missing.status_code == 404

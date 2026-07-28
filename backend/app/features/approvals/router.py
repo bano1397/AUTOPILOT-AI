@@ -1,4 +1,4 @@
-"""Approval HTTP endpoints (authenticated, owner-scoped)."""
+"""Approval HTTP endpoints (workspace-scoped)."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from app.features.approvals.schemas import (
     ApprovalRead,
 )
 from app.features.approvals.service import ApprovalService
-from app.features.auth.dependencies import get_current_user
 from app.features.rag.schemas import RagMatchRead
+from app.features.users.dependencies import get_workspace_user
 from app.features.users.models import User
 
 router = APIRouter()
@@ -25,10 +25,10 @@ router = APIRouter()
 @router.get("", response_model=ApiResponse[list[ApprovalRead]])
 async def list_pending_approvals(
     pagination: PaginationParams = Depends(pagination_params),
-    current_user: User = Depends(get_current_user),
+    workspace_user: User = Depends(get_workspace_user),
     service: ApprovalService = Depends(get_approval_service),
 ) -> ApiResponse[list[ApprovalRead]]:
-    items, total = await service.list_pending(current_user.id, pagination)
+    items, total = await service.list_pending(workspace_user.id, pagination)
     return ApiResponse(
         data=[ApprovalRead.model_validate(item) for item in items],
         meta=build_page_meta(pagination, total).model_dump(),
@@ -39,11 +39,11 @@ async def list_pending_approvals(
 async def decide_approval(
     approval_id: UUID,
     payload: ApprovalDecisionRequest,
-    current_user: User = Depends(get_current_user),
+    workspace_user: User = Depends(get_workspace_user),
     service: ApprovalService = Depends(get_approval_service),
 ) -> ApiResponse[ApprovalDecisionRead]:
     approval, state = await service.decide(
-        current_user.id, approval_id, payload.decision
+        workspace_user.id, approval_id, payload.decision
     )
     return ApiResponse(
         data=ApprovalDecisionRead(

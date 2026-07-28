@@ -7,17 +7,12 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from app.core.security import hash_password
-from app.features.users.models import User
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
 from app.infrastructure.storage import LocalStorageProvider
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from tests.fakes import FakeEmbeddingProvider, FakeVectorStore
-
-_ALICE = ("alice@example.com", "alicepass1")
-_BOB = ("bob@example.com", "bobpass123")
 
 
 @pytest.fixture
@@ -47,48 +42,24 @@ async def api(
         yield client
 
 
-async def _seed_and_login(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider, email: str, password: str
-) -> str:
-    async with db.session() as session:
-        session.add(User(email=email, password_hash=hash_password(password)))
-        await session.commit()
-    response = await api.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
-    )
-    return str(response.json()["data"]["access_token"])
-
-
-def _auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
-
-
-async def _upload(api: AsyncClient, token: str, name: str, text: str) -> str:
+async def _upload(api: AsyncClient, name: str, text: str) -> str:
     response = await api.post(
         "/api/v1/documents",
-        headers=_auth(token),
         files={"file": (name, text.encode(), "text/plain")},
     )
     assert response.status_code == 201
     return str(response.json()["data"]["id"])
 
 
-async def test_query_requires_authentication(api: AsyncClient) -> None:
-    response = await api.post("/api/v1/rag/query", json={"query": "anything"})
-    assert response.status_code == 401
-
-
 async def test_query_returns_cited_matches(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    token = await _seed_and_login(api, db, *_ALICE)
     document_id = await _upload(
-        api, token, "handbook.txt", "Employees receive twenty vacation days per year. " * 30
+        api, "handbook.txt", "Employees receive twenty vacation days per year. " * 30
     )
 
     response = await api.post(
         "/api/v1/rag/query",
-        headers=_auth(token),
         json={"query": "how many vacation days do employees get?", "top_k": 3},
     )
 
@@ -106,28 +77,12 @@ async def test_query_returns_cited_matches(
         assert isinstance(match["distance"], float)
 
 
-async def test_query_is_owner_isolated(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider
-) -> None:
-    alice = await _seed_and_login(api, db, *_ALICE)
-    bob = await _seed_and_login(api, db, *_BOB)
-    await _upload(api, alice, "alice-secrets.txt", "Alice's confidential notes. " * 30)
-
-    response = await api.post(
-        "/api/v1/rag/query", headers=_auth(bob), json={"query": "confidential notes"}
-    )
-
-    assert response.status_code == 200
-    assert response.json()["data"]["matches"] == []
-
-
 async def test_query_with_empty_index_returns_no_matches(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    token = await _seed_and_login(api, db, *_ALICE)
 
     response = await api.post(
-        "/api/v1/rag/query", headers=_auth(token), json={"query": "anything at all"}
+        "/api/v1/rag/query", json={"query": "anything at all"}
     )
 
     assert response.status_code == 200
@@ -137,11 +92,10 @@ async def test_query_with_empty_index_returns_no_matches(
 async def test_query_validation_bounds(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    token = await _seed_and_login(api, db, *_ALICE)
 
-    empty = await api.post("/api/v1/rag/query", headers=_auth(token), json={"query": ""})
+    empty = await api.post("/api/v1/rag/query", json={"query": ""})
     too_many = await api.post(
-        "/api/v1/rag/query", headers=_auth(token), json={"query": "q", "top_k": 21}
+        "/api/v1/rag/query", json={"query": "q", "top_k": 21}
     )
 
     assert empty.status_code == 422
@@ -154,11 +108,10 @@ async def test_embedding_outage_returns_502(
     db: SqlAlchemyDatabaseProvider,
     fake_embeddings: FakeEmbeddingProvider,
 ) -> None:
-    token = await _seed_and_login(api, db, *_ALICE)
     fake_embeddings.fail = True
 
     response = await api.post(
-        "/api/v1/rag/query", headers=_auth(token), json={"query": "anything"}
+        "/api/v1/rag/query", json={"query": "anything"}
     )
 
     assert response.status_code == 502

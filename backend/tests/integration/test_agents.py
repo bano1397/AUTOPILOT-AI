@@ -7,8 +7,6 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from app.core.security import hash_password
-from app.features.users.models import User
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
 from app.infrastructure.storage import LocalStorageProvider
 from app.platform.observability import AiExecution, AiExecutionRecorder
@@ -17,8 +15,6 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 from tests.fakes import FakeEmbeddingProvider, FakeLLMProvider, FakeVectorStore
-
-_ALICE = ("alice@example.com", "alicepass1")
 
 
 @pytest.fixture
@@ -44,44 +40,20 @@ async def api(
         yield client
 
 
-async def _seed_and_login(api: AsyncClient, db: SqlAlchemyDatabaseProvider) -> str:
-    email, password = _ALICE
-    async with db.session() as session:
-        session.add(User(email=email, password_hash=hash_password(password)))
-        await session.commit()
-    response = await api.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
-    )
-    return str(response.json()["data"]["access_token"])
-
-
-def _auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
-
-
-async def _upload(api: AsyncClient, token: str, name: str, text: str) -> str:
+async def _upload(api: AsyncClient, name: str, text: str) -> str:
     response = await api.post(
         "/api/v1/documents",
-        headers=_auth(token),
         files={"file": (name, text.encode(), "text/plain")},
     )
     assert response.status_code == 201
     return str(response.json()["data"]["id"])
 
 
-async def test_agents_endpoints_require_authentication(api: AsyncClient) -> None:
-    listing = await api.get("/api/v1/agents")
-    ask = await api.post("/api/v1/agents/ask", json={"message": "hi"})
-    assert listing.status_code == 401
-    assert ask.status_code == 401
-
-
 async def test_list_agents_returns_registered_agents(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
 
-    response = await api.get("/api/v1/agents", headers=_auth(token))
+    response = await api.get("/api/v1/agents")
 
     assert response.status_code == 200
     agents = {entry["name"]: entry["description"] for entry in response.json()["data"]}
@@ -93,16 +65,14 @@ async def test_list_agents_returns_registered_agents(
 async def test_supervisor_routes_document_question_to_knowledge_agent(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider, fake_llm: FakeLLMProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
     document_id = await _upload(
-        api, token, "handbook.txt", "Employees receive twenty vacation days. " * 30
+        api, "handbook.txt", "Employees receive twenty vacation days. " * 30
     )
     # Call 1 = supervisor classification, call 2 = grounded answer.
     fake_llm.replies = ["knowledge", "You get 20 days [1]."]
 
     response = await api.post(
         "/api/v1/agents/ask",
-        headers=_auth(token),
         json={"message": "how many vacation days do we get?"},
     )
 
@@ -118,11 +88,10 @@ async def test_supervisor_routes_document_question_to_knowledge_agent(
 async def test_supervisor_routes_small_talk_to_general_agent(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider, fake_llm: FakeLLMProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
     fake_llm.replies = ["general", "Hello! How can I help you today?"]
 
     response = await api.post(
-        "/api/v1/agents/ask", headers=_auth(token), json={"message": "hey there!"}
+        "/api/v1/agents/ask", json={"message": "hey there!"}
     )
 
     assert response.status_code == 200
@@ -136,12 +105,11 @@ async def test_supervisor_routes_small_talk_to_general_agent(
 async def test_unparseable_routing_reply_falls_back_to_knowledge(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider, fake_llm: FakeLLMProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
     # Garbage classification; no documents indexed -> honest no-context answer.
     fake_llm.replies = ["I think maybe the docs one??"]
 
     response = await api.post(
-        "/api/v1/agents/ask", headers=_auth(token), json={"message": "what is our policy?"}
+        "/api/v1/agents/ask", json={"message": "what is our policy?"}
     )
 
     assert response.status_code == 200
@@ -155,12 +123,11 @@ async def test_unparseable_routing_reply_falls_back_to_knowledge(
 async def test_agent_run_is_fully_audited(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider, fake_llm: FakeLLMProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
-    await _upload(api, token, "handbook.txt", "Vacation policy details. " * 40)
+    await _upload(api, "handbook.txt", "Vacation policy details. " * 40)
     fake_llm.replies = ["knowledge", "Answer [1]."]
 
     response = await api.post(
-        "/api/v1/agents/ask", headers=_auth(token), json={"message": "vacation policy?"}
+        "/api/v1/agents/ask", json={"message": "vacation policy?"}
     )
     assert response.status_code == 200
 
@@ -178,7 +145,6 @@ async def test_agent_run_is_fully_audited(
 async def test_ask_validation_bounds(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
 
-    empty = await api.post("/api/v1/agents/ask", headers=_auth(token), json={"message": ""})
+    empty = await api.post("/api/v1/agents/ask", json={"message": ""})
     assert empty.status_code == 422

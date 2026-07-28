@@ -8,8 +8,6 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
-from app.core.security import hash_password
-from app.features.users.models import User
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
 from app.infrastructure.storage import LocalStorageProvider
 from app.platform.observability import AiExecutionRecorder
@@ -17,9 +15,6 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from tests.fakes import FakeEmbeddingProvider, FakeLLMProvider, FakeVectorStore
-
-_ALICE = ("alice@example.com", "alicepass1")
-_BOB = ("bob@example.com", "bobpass123")
 
 
 @pytest.fixture
@@ -45,38 +40,18 @@ async def api(
         yield client
 
 
-async def _seed_and_login(
-    api: AsyncClient,
-    db: SqlAlchemyDatabaseProvider,
-    email: str = _ALICE[0],
-    password: str = _ALICE[1],
-) -> str:
-    async with db.session() as session:
-        session.add(User(email=email, password_hash=hash_password(password)))
-        await session.commit()
-    response = await api.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
-    )
-    return str(response.json()["data"]["access_token"])
-
-
-def _auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
-
-
 async def test_ask_creates_completed_run_with_steps(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider, fake_llm: FakeLLMProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
     fake_llm.replies = ["general", "Hello!"]
 
     ask = await api.post(
-        "/api/v1/agents/ask", headers=_auth(token), json={"message": "hi"}
+        "/api/v1/agents/ask", json={"message": "hi"}
     )
     assert ask.status_code == 200
     run_id = ask.json()["data"]["run_id"]
 
-    detail = await api.get(f"/api/v1/workflows/runs/{run_id}", headers=_auth(token))
+    detail = await api.get(f"/api/v1/workflows/runs/{run_id}")
     assert detail.status_code == 200
     data = detail.json()["data"]
     assert data["run"]["workflow_name"] == "agents.ask"
@@ -94,7 +69,6 @@ async def test_ask_creates_completed_run_with_steps(
 async def test_failed_run_is_recorded_and_error_propagates(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider, fake_llm: FakeLLMProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
     fake_llm.fail = True
 
     # A supervisor failure is an unexpected error (500 path). Starlette's
@@ -102,10 +76,10 @@ async def test_failed_run_is_recorded_and_error_propagates(
     # propagates that to the test client — so expect the raise here.
     with pytest.raises(RuntimeError, match="llm service unavailable"):
         await api.post(
-            "/api/v1/agents/ask", headers=_auth(token), json={"message": "hi"}
+            "/api/v1/agents/ask", json={"message": "hi"}
         )
 
-    runs = await api.get("/api/v1/workflows/runs", headers=_auth(token))
+    runs = await api.get("/api/v1/workflows/runs")
     assert runs.status_code == 200
     body = runs.json()
     assert body["meta"]["total"] == 1
@@ -114,34 +88,9 @@ async def test_failed_run_is_recorded_and_error_propagates(
     assert "llm service unavailable" in run["error"]
 
 
-async def test_runs_list_is_owner_scoped(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider, fake_llm: FakeLLMProvider
-) -> None:
-    alice = await _seed_and_login(api, db)
-    bob = await _seed_and_login(api, db, *_BOB)
-    fake_llm.replies = ["general", "hi"]
-    ask = await api.post(
-        "/api/v1/agents/ask", headers=_auth(alice), json={"message": "hello"}
-    )
-    run_id = ask.json()["data"]["run_id"]
-
-    bob_list = await api.get("/api/v1/workflows/runs", headers=_auth(bob))
-    assert bob_list.json()["meta"]["total"] == 0
-
-    bob_detail = await api.get(f"/api/v1/workflows/runs/{run_id}", headers=_auth(bob))
-    assert bob_detail.status_code == 404
-
-
 async def test_unknown_run_returns_404(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
-    response = await api.get(f"/api/v1/workflows/runs/{uuid4()}", headers=_auth(token))
+    response = await api.get(f"/api/v1/workflows/runs/{uuid4()}")
     assert response.status_code == 404
 
-
-async def test_runs_endpoints_require_authentication(api: AsyncClient) -> None:
-    listing = await api.get("/api/v1/workflows/runs")
-    detail = await api.get(f"/api/v1/workflows/runs/{uuid4()}")
-    assert listing.status_code == 401
-    assert detail.status_code == 401

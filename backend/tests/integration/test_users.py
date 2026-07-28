@@ -1,4 +1,9 @@
-"""Integration tests for the users API and RBAC."""
+"""Integration tests for the workspace identity and users listing.
+
+There is no authentication and no role model (``docs/COMPLETION_PLAN.md`` §3),
+so these tests cover identity provisioning and the listing's pagination math
+rather than access control.
+"""
 
 from __future__ import annotations
 
@@ -6,14 +11,12 @@ from collections.abc import AsyncIterator
 from uuid import uuid4
 
 import pytest_asyncio
-from app.core.security import hash_password
-from app.features.users.models import User, UserRole
+from app.features.users.dependencies import WORKSPACE_USER_EMAIL
+from app.features.users.models import User
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-
-_ADMIN = ("admin@example.com", "adminpass1")
-_USER = ("user@example.com", "userpass12")
+from sqlalchemy import func, select
 
 
 @pytest_asyncio.fixture
@@ -24,102 +27,85 @@ async def api(app: FastAPI, db: SqlAlchemyDatabaseProvider) -> AsyncIterator[Asy
         yield client
 
 
-async def _seed(
-    db: SqlAlchemyDatabaseProvider,
-    email: str,
-    password: str,
-    role: UserRole = UserRole.USER,
-) -> None:
+async def _seed(db: SqlAlchemyDatabaseProvider, email: str) -> None:
     async with db.session() as session:
-        session.add(
-            User(email=email, password_hash=hash_password(password), role=role)
-        )
+        session.add(User(email=email))
         await session.commit()
 
 
-async def _token(api: AsyncClient, email: str, password: str) -> str:
-    response = await api.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
-    )
-    assert response.status_code == 200
-    return str(response.json()["data"]["access_token"])
+async def _user_count(db: SqlAlchemyDatabaseProvider) -> int:
+    async with db.session() as session:
+        result = await session.execute(select(func.count()).select_from(User))
+        return int(result.scalar_one())
 
 
-def _auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+async def test_me_returns_the_workspace_identity(api: AsyncClient) -> None:
+    response = await api.get("/api/v1/users/me")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["email"] == WORKSPACE_USER_EMAIL
+    assert body["data"]["is_active"] is True
+    # No auth means there is no password hash and no role to leak.
+    assert "password_hash" not in body["data"]
+    assert "role" not in body["data"]
 
 
-async def test_list_users_requires_authentication(api: AsyncClient) -> None:
+async def test_workspace_identity_is_provisioned_once(
+    api: AsyncClient, db: SqlAlchemyDatabaseProvider
+) -> None:
+    first = await api.get("/api/v1/users/me")
+    second = await api.get("/api/v1/users/me")
+
+    assert first.json()["data"]["id"] == second.json()["data"]["id"]
+    assert await _user_count(db) == 1
+
+
+async def test_me_is_reachable_without_any_credentials(api: AsyncClient) -> None:
+    # No Authorization header, no cookie — the request must still succeed.
+    assert api.headers.get("Authorization") is None
+    assert (await api.get("/api/v1/users/me")).status_code == 200
+
+
+async def test_list_users_is_open(api: AsyncClient) -> None:
+    await api.get("/api/v1/users/me")  # provision the identity
+
     response = await api.get("/api/v1/users")
-    assert response.status_code == 401
-
-
-async def test_normal_user_is_forbidden(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider
-) -> None:
-    await _seed(db, *_USER, role=UserRole.USER)
-    token = await _token(api, *_USER)
-
-    response = await api.get("/api/v1/users", headers=_auth(token))
-
-    assert response.status_code == 403
-    assert response.json()["error"]["code"] == "PERMISSION_DENIED"
-
-
-async def test_admin_can_list_users(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider
-) -> None:
-    await _seed(db, *_ADMIN, role=UserRole.ADMIN)
-    token = await _token(api, *_ADMIN)
-
-    response = await api.get("/api/v1/users", headers=_auth(token))
 
     assert response.status_code == 200
     body = response.json()
-    assert body["success"] is True
     assert body["meta"]["total"] == 1
-    assert body["data"][0]["email"] == _ADMIN[0]
+    assert body["data"][0]["email"] == WORKSPACE_USER_EMAIL
 
 
-async def test_admin_can_get_user_by_id(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider
-) -> None:
-    await _seed(db, *_ADMIN, role=UserRole.ADMIN)
-    token = await _token(api, *_ADMIN)
-    listed = await api.get("/api/v1/users", headers=_auth(token))
-    user_id = listed.json()["data"][0]["id"]
+async def test_get_user_by_id(api: AsyncClient) -> None:
+    me = await api.get("/api/v1/users/me")
+    user_id = me.json()["data"]["id"]
 
-    response = await api.get(f"/api/v1/users/{user_id}", headers=_auth(token))
+    response = await api.get(f"/api/v1/users/{user_id}")
 
     assert response.status_code == 200
     assert response.json()["data"]["id"] == user_id
 
 
-async def test_get_missing_user_returns_404(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider
-) -> None:
-    await _seed(db, *_ADMIN, role=UserRole.ADMIN)
-    token = await _token(api, *_ADMIN)
-
-    response = await api.get(f"/api/v1/users/{uuid4()}", headers=_auth(token))
+async def test_get_missing_user_returns_404(api: AsyncClient) -> None:
+    response = await api.get(f"/api/v1/users/{uuid4()}")
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
 async def test_pagination(api: AsyncClient, db: SqlAlchemyDatabaseProvider) -> None:
-    await _seed(db, *_ADMIN, role=UserRole.ADMIN)
+    await api.get("/api/v1/users/me")  # the workspace identity is row 1
     for index in range(4):
-        await _seed(db, f"extra{index}@example.com", "password12")
-    token = await _token(api, *_ADMIN)
+        await _seed(db, f"extra{index}@example.com")
 
-    response = await api.get(
-        "/api/v1/users", params={"page": 1, "page_size": 2}, headers=_auth(token)
-    )
+    response = await api.get("/api/v1/users", params={"page": 1, "page_size": 2})
 
     assert response.status_code == 200
     body = response.json()
     assert len(body["data"]) == 2
-    assert body["meta"]["total"] == 5  # 1 admin + 4 extra
+    assert body["meta"]["total"] == 5  # workspace identity + 4 seeded
     assert body["meta"]["page_size"] == 2
     assert body["meta"]["pages"] == 3

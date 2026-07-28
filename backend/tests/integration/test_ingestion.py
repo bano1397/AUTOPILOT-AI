@@ -12,9 +12,7 @@ from uuid import UUID
 
 import pytest
 import pytest_asyncio
-from app.core.security import hash_password
 from app.features.documents.models import DocumentChunk
-from app.features.users.models import User
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
 from app.infrastructure.storage import LocalStorageProvider
 from fastapi import FastAPI
@@ -22,8 +20,6 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 
 from tests.fakes import FakeEmbeddingProvider, FakeVectorStore
-
-_ALICE = ("alice@example.com", "alicepass1")
 
 
 @pytest.fixture
@@ -53,21 +49,6 @@ async def api(
         yield client
 
 
-@pytest_asyncio.fixture
-async def token(api: AsyncClient, db: SqlAlchemyDatabaseProvider) -> str:
-    async with db.session() as session:
-        session.add(User(email=_ALICE[0], password_hash=hash_password(_ALICE[1])))
-        await session.commit()
-    response = await api.post(
-        "/api/v1/auth/login", json={"email": _ALICE[0], "password": _ALICE[1]}
-    )
-    return str(response.json()["data"]["access_token"])
-
-
-def _auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
-
-
 async def _chunk_count(db: SqlAlchemyDatabaseProvider, document_id: str) -> int:
     async with db.session() as session:
         result = await session.execute(
@@ -79,19 +60,18 @@ async def _chunk_count(db: SqlAlchemyDatabaseProvider, document_id: str) -> int:
 
 
 async def test_upload_triggers_ingestion_to_indexed(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider, token: str
+    api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
     body = ("The quick brown fox jumps over the lazy dog. " * 60).encode()
 
     created = await api.post(
         "/api/v1/documents",
-        headers=_auth(token),
         files={"file": ("fox.txt", body, "text/plain")},
     )
     assert created.status_code == 201
     document_id = created.json()["data"]["id"]
 
-    fetched = await api.get(f"/api/v1/documents/{document_id}", headers=_auth(token))
+    fetched = await api.get(f"/api/v1/documents/{document_id}")
 
     data = fetched.json()["data"]
     assert data["status"] == "indexed"
@@ -101,12 +81,11 @@ async def test_upload_triggers_ingestion_to_indexed(
 
 
 async def test_chunks_carry_previews_and_sequential_indexes(
-    api: AsyncClient, db: SqlAlchemyDatabaseProvider, token: str
+    api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
     body = ("Paragraph one about revenue. " * 50).encode()
     created = await api.post(
         "/api/v1/documents",
-        headers=_auth(token),
         files={"file": ("report.txt", body, "text/plain")},
     )
     document_id = created.json()["data"]["id"]
@@ -128,18 +107,17 @@ async def test_chunks_carry_previews_and_sequential_indexes(
 
 
 async def test_unparseable_pdf_is_marked_failed(
-    api: AsyncClient, token: str
+    api: AsyncClient
 ) -> None:
     # Valid magic bytes (passes upload validation) but not a parseable PDF.
     created = await api.post(
         "/api/v1/documents",
-        headers=_auth(token),
         files={"file": ("broken.pdf", b"%PDF-1.7 garbage without structure", "application/pdf")},
     )
     assert created.status_code == 201
     document_id = created.json()["data"]["id"]
 
-    fetched = await api.get(f"/api/v1/documents/{document_id}", headers=_auth(token))
+    fetched = await api.get(f"/api/v1/documents/{document_id}")
 
     data = fetched.json()["data"]
     assert data["status"] == "failed"
@@ -149,20 +127,18 @@ async def test_unparseable_pdf_is_marked_failed(
 async def test_delete_document_removes_chunks(
     api: AsyncClient,
     db: SqlAlchemyDatabaseProvider,
-    token: str,
     fake_vectors: FakeVectorStore,
 ) -> None:
     body = ("Some content to be chunked and then deleted. " * 40).encode()
     created = await api.post(
         "/api/v1/documents",
-        headers=_auth(token),
         files={"file": ("temp.txt", body, "text/plain")},
     )
     document_id = created.json()["data"]["id"]
     assert await _chunk_count(db, document_id) > 0
     assert len(fake_vectors.vectors) > 0
 
-    deleted = await api.delete(f"/api/v1/documents/{document_id}", headers=_auth(token))
+    deleted = await api.delete(f"/api/v1/documents/{document_id}")
 
     assert deleted.status_code == 200
     assert await _chunk_count(db, document_id) == 0
@@ -172,14 +148,12 @@ async def test_delete_document_removes_chunks(
 async def test_indexing_upserts_vectors_with_metadata(
     api: AsyncClient,
     db: SqlAlchemyDatabaseProvider,
-    token: str,
     fake_embeddings: FakeEmbeddingProvider,
     fake_vectors: FakeVectorStore,
 ) -> None:
     body = ("Quarterly revenue grew by twelve percent. " * 50).encode()
     created = await api.post(
         "/api/v1/documents",
-        headers=_auth(token),
         files={"file": ("revenue.txt", body, "text/plain")},
     )
     document_id = created.json()["data"]["id"]
@@ -205,7 +179,6 @@ async def test_indexing_upserts_vectors_with_metadata(
 async def test_embedding_failure_marks_document_failed(
     api: AsyncClient,
     db: SqlAlchemyDatabaseProvider,
-    token: str,
     fake_embeddings: FakeEmbeddingProvider,
     fake_vectors: FakeVectorStore,
 ) -> None:
@@ -213,12 +186,11 @@ async def test_embedding_failure_marks_document_failed(
     body = ("Text that will fail to embed. " * 40).encode()
     created = await api.post(
         "/api/v1/documents",
-        headers=_auth(token),
         files={"file": ("doomed.txt", body, "text/plain")},
     )
     document_id = created.json()["data"]["id"]
 
-    fetched = await api.get(f"/api/v1/documents/{document_id}", headers=_auth(token))
+    fetched = await api.get(f"/api/v1/documents/{document_id}")
 
     data = fetched.json()["data"]
     assert data["status"] == "failed"

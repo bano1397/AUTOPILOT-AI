@@ -7,8 +7,6 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from app.core.security import hash_password
-from app.features.users.models import User
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
 from app.infrastructure.storage import LocalStorageProvider
 from app.platform.observability import AiExecution, AiExecutionRecorder
@@ -17,8 +15,6 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 from tests.fakes import FakeEmbeddingProvider, FakeLLMProvider, FakeVectorStore
-
-_ALICE = ("alice@example.com", "alicepass1")
 
 
 @pytest.fixture
@@ -45,47 +41,24 @@ async def api(
         yield client
 
 
-async def _seed_and_login(api: AsyncClient, db: SqlAlchemyDatabaseProvider) -> str:
-    email, password = _ALICE
-    async with db.session() as session:
-        session.add(User(email=email, password_hash=hash_password(password)))
-        await session.commit()
-    response = await api.post(
-        "/api/v1/auth/login", json={"email": email, "password": password}
-    )
-    return str(response.json()["data"]["access_token"])
-
-
-def _auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
-
-
-async def _upload(api: AsyncClient, token: str, name: str, text: str) -> str:
+async def _upload(api: AsyncClient, name: str, text: str) -> str:
     response = await api.post(
         "/api/v1/documents",
-        headers=_auth(token),
         files={"file": (name, text.encode(), "text/plain")},
     )
     assert response.status_code == 201
     return str(response.json()["data"]["id"])
 
 
-async def test_ask_requires_authentication(api: AsyncClient) -> None:
-    response = await api.post("/api/v1/rag/ask", json={"query": "anything"})
-    assert response.status_code == 401
-
-
 async def test_ask_returns_grounded_answer_with_sources(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider, fake_llm: FakeLLMProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
     document_id = await _upload(
-        api, token, "handbook.txt", "Employees receive twenty vacation days per year. " * 30
+        api, "handbook.txt", "Employees receive twenty vacation days per year. " * 30
     )
 
     response = await api.post(
         "/api/v1/rag/ask",
-        headers=_auth(token),
         json={"query": "how many vacation days do employees get?", "top_k": 3},
     )
 
@@ -110,11 +83,10 @@ async def test_ask_returns_grounded_answer_with_sources(
 async def test_ask_is_recorded_in_ai_executions(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
-    await _upload(api, token, "handbook.txt", "Vacation policy details. " * 40)
+    await _upload(api, "handbook.txt", "Vacation policy details. " * 40)
 
     response = await api.post(
-        "/api/v1/rag/ask", headers=_auth(token), json={"query": "vacation policy?"}
+        "/api/v1/rag/ask", json={"query": "vacation policy?"}
     )
     assert response.status_code == 200
 
@@ -131,10 +103,9 @@ async def test_ask_is_recorded_in_ai_executions(
 async def test_ask_without_context_skips_llm(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider, fake_llm: FakeLLMProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
 
     response = await api.post(
-        "/api/v1/rag/ask", headers=_auth(token), json={"query": "anything at all"}
+        "/api/v1/rag/ask", json={"query": "anything at all"}
     )
 
     assert response.status_code == 200
@@ -149,12 +120,11 @@ async def test_ask_without_context_skips_llm(
 async def test_ask_llm_outage_returns_502_and_is_recorded(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider, fake_llm: FakeLLMProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
-    await _upload(api, token, "handbook.txt", "Vacation policy details. " * 40)
+    await _upload(api, "handbook.txt", "Vacation policy details. " * 40)
     fake_llm.fail = True
 
     response = await api.post(
-        "/api/v1/rag/ask", headers=_auth(token), json={"query": "vacation policy?"}
+        "/api/v1/rag/ask", json={"query": "vacation policy?"}
     )
 
     assert response.status_code == 502
@@ -173,11 +143,10 @@ async def test_ask_llm_outage_returns_502_and_is_recorded(
 async def test_ask_validation_bounds(
     api: AsyncClient, db: SqlAlchemyDatabaseProvider
 ) -> None:
-    token = await _seed_and_login(api, db)
 
-    empty = await api.post("/api/v1/rag/ask", headers=_auth(token), json={"query": ""})
+    empty = await api.post("/api/v1/rag/ask", json={"query": ""})
     too_many = await api.post(
-        "/api/v1/rag/ask", headers=_auth(token), json={"query": "q", "top_k": 21}
+        "/api/v1/rag/ask", json={"query": "q", "top_k": 21}
     )
 
     assert empty.status_code == 422

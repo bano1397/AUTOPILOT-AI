@@ -3,8 +3,6 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 
-import { useAuthStore } from "@/lib/auth/store";
-
 function greetingFor(hour: number): string {
   if (hour < 12) return "Good morning";
   if (hour < 18) return "Good afternoon";
@@ -12,10 +10,8 @@ function greetingFor(hour: number): string {
 }
 
 export function GreetingHero() {
-  const user = useAuthStore((state) => state.user);
-  const handle = user?.email?.split("@")[0];
-  // Hide the shared public-workspace placeholder handle from the greeting.
-  const name = handle && handle !== "public" ? handle : undefined;
+  // No accounts exist, so there is no name to greet — the shared workspace
+  // identity is not a person (docs/COMPLETION_PLAN.md §3).
   const [now, setNow] = useState<Date | null>(null);
 
   // Rendered only after mount so server and client markup match.
@@ -42,11 +38,6 @@ export function GreetingHero() {
       </p>
       <h1 className="mt-1 text-3xl font-semibold tracking-tight">
         {now ? greetingFor(now.getHours()) : "Welcome"}
-        {name ? (
-          <>
-            , <span className="capitalize">{name}</span>
-          </>
-        ) : null}
       </h1>
       <p className="mt-1 text-muted-foreground">
         Your enterprise AI automation platform — here’s what’s happening.

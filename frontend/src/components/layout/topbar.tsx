@@ -16,13 +16,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useHealth } from "@/features/system/hooks";
-import { useAuthStore } from "@/lib/auth/store";
 import { useCommandPalette } from "@/lib/command/store";
 import { cn } from "@/lib/utils";
 
 export function Topbar() {
   const router = useRouter();
-  const user = useAuthStore((state) => state.user);
   const openPalette = useCommandPalette((state) => state.setOpen);
   const health = useHealth();
 
@@ -44,7 +42,6 @@ export function Topbar() {
           text: "text-emerald-600 dark:text-emerald-400",
         };
 
-  const initial = user?.email?.[0]?.toUpperCase() ?? "A";
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur md:px-6">
@@ -84,17 +81,17 @@ export function Topbar() {
               className="flex items-center gap-2 rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Avatar className="size-8">
-                <AvatarFallback className="text-xs">{initial}</AvatarFallback>
+                <AvatarFallback className="text-xs">AP</AvatarFallback>
               </Avatar>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-60">
             <DropdownMenuLabel className="flex flex-col gap-0.5">
               <span className="text-sm font-medium text-foreground">
-                Public workspace
+                Shared workspace
               </span>
               <span className="truncate text-xs font-normal">
-                Open demo · no sign-in required
+                Open instance · no sign-in
               </span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

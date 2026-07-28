@@ -1,4 +1,4 @@
-"""Task HTTP endpoints (authenticated, owner-scoped)."""
+"""Task HTTP endpoints (workspace-scoped)."""
 
 from __future__ import annotations
 
@@ -9,11 +9,11 @@ from fastapi import status as http_status
 
 from app.core.pagination import PaginationParams, build_page_meta, pagination_params
 from app.core.schemas import ApiResponse, MessageResponse
-from app.features.auth.dependencies import get_current_user
 from app.features.tasks.dependencies import get_task_service
 from app.features.tasks.models import TaskStatus
 from app.features.tasks.schemas import TaskCreateRequest, TaskRead, TaskUpdateRequest
 from app.features.tasks.service import TaskService
+from app.features.users.dependencies import get_workspace_user
 from app.features.users.models import User
 
 router = APIRouter()
@@ -23,10 +23,10 @@ router = APIRouter()
 async def list_tasks(
     status: TaskStatus | None = None,
     pagination: PaginationParams = Depends(pagination_params),
-    current_user: User = Depends(get_current_user),
+    workspace_user: User = Depends(get_workspace_user),
     service: TaskService = Depends(get_task_service),
 ) -> ApiResponse[list[TaskRead]]:
-    items, total = await service.list_tasks(current_user.id, pagination, status)
+    items, total = await service.list_tasks(workspace_user.id, pagination, status)
     return ApiResponse(
         data=[TaskRead.model_validate(item) for item in items],
         meta=build_page_meta(pagination, total).model_dump(),
@@ -38,10 +38,10 @@ async def list_tasks(
 )
 async def create_task(
     payload: TaskCreateRequest,
-    current_user: User = Depends(get_current_user),
+    workspace_user: User = Depends(get_workspace_user),
     service: TaskService = Depends(get_task_service),
 ) -> ApiResponse[TaskRead]:
-    task = await service.create(current_user.id, payload)
+    task = await service.create(workspace_user.id, payload)
     return ApiResponse(data=TaskRead.model_validate(task))
 
 
@@ -49,18 +49,18 @@ async def create_task(
 async def update_task(
     task_id: UUID,
     payload: TaskUpdateRequest,
-    current_user: User = Depends(get_current_user),
+    workspace_user: User = Depends(get_workspace_user),
     service: TaskService = Depends(get_task_service),
 ) -> ApiResponse[TaskRead]:
-    task = await service.update(current_user.id, task_id, payload)
+    task = await service.update(workspace_user.id, task_id, payload)
     return ApiResponse(data=TaskRead.model_validate(task))
 
 
 @router.delete("/{task_id}", response_model=ApiResponse[MessageResponse])
 async def delete_task(
     task_id: UUID,
-    current_user: User = Depends(get_current_user),
+    workspace_user: User = Depends(get_workspace_user),
     service: TaskService = Depends(get_task_service),
 ) -> ApiResponse[MessageResponse]:
-    await service.delete(current_user.id, task_id)
+    await service.delete(workspace_user.id, task_id)
     return ApiResponse(data=MessageResponse(message="Task deleted"))

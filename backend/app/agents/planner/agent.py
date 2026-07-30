@@ -23,7 +23,7 @@ UNPARSEABLE_ANSWER = (
 )
 
 
-@register_agent
+@register_agent(supervisor_routable=True)
 class PlannerAgent(BaseAgent):
     """Turns a goal into persisted, prioritized tasks."""
 

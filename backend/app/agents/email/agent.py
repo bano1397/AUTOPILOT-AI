@@ -36,6 +36,9 @@ class EmailDraftOutcome:
     model: str
 
 
+# Not supervisor_routable: this agent is driven by the email triage pipeline
+# (sync -> classify -> draft), not by the supervisor graph, so a workflow
+# version must not be able to route chat messages to it.
 @register_agent(name="email")
 class EmailAgent:
     """Triages one inbound message and drafts a grounded reply."""

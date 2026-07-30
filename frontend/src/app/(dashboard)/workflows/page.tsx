@@ -3,10 +3,13 @@
 import { Loader2, Workflow as WorkflowIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { DefinitionsPanel } from "@/components/workflows/definitions-panel";
+import { LiveStatus } from "@/components/workflows/live-status";
 import { WorkflowGraph } from "@/components/workflows/workflow-graph";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkflowRun, useWorkflowRuns } from "@/features/workflows/hooks";
 import type {
   WorkflowRun,
@@ -55,7 +58,7 @@ export default function WorkflowsPage() {
             Workflows
           </h1>
           <p className="text-muted-foreground">
-            Every agent execution as a step-by-step graph — timing, and outcome.
+            Versioned definitions, and every execution as a step-by-step graph.
           </p>
         </div>
         {meta && (
@@ -65,69 +68,85 @@ export default function WorkflowsPage() {
         )}
       </div>
 
-      {runs.isPending ? (
-        <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
-          <Skeleton className="h-96 rounded-xl" />
-          <Skeleton className="h-96 rounded-xl" />
-        </div>
-      ) : items.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-2xl border py-20 text-center text-muted-foreground">
-          <WorkflowIcon className="size-8" />
-          <p className="text-sm">
-            No workflow runs yet — send a message to the agents to create one.
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
-          {/* Run list */}
-          <div className="space-y-2">
-            {items.map((run) => (
-              <RunListItem
-                key={run.id}
-                run={run}
-                active={run.id === selected}
-                onSelect={() => setSelected(run.id)}
-              />
-            ))}
-            {meta && meta.pages > 1 && (
-              <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
-                <span>
-                  Page {meta.page}/{meta.pages}
-                </span>
-                <div className="flex gap-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => setPage((c) => c - 1)}
-                  >
-                    Prev
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= meta.pages}
-                    onClick={() => setPage((c) => c + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
+      <Tabs defaultValue="runs" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="runs">Runs</TabsTrigger>
+          <TabsTrigger value="definitions">Definitions</TabsTrigger>
+        </TabsList>
 
-          {/* Detail */}
-          <div className="rounded-2xl border bg-card p-5">
-            {selected ? (
-              <RunDetail runId={selected} />
-            ) : (
-              <p className="py-16 text-center text-sm text-muted-foreground">
-                Select a run to see its execution graph.
+        <TabsContent value="definitions" className="space-y-4">
+          <LiveStatus />
+          <DefinitionsPanel />
+        </TabsContent>
+
+        <TabsContent value="runs" className="space-y-4">
+          <LiveStatus />
+          {runs.isPending ? (
+            <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
+              <Skeleton className="h-96 rounded-xl" />
+              <Skeleton className="h-96 rounded-xl" />
+            </div>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-2xl border py-20 text-center text-muted-foreground">
+              <WorkflowIcon className="size-8" />
+              <p className="text-sm">
+                No workflow runs yet — send a message to the agents to create
+                one.
               </p>
-            )}
-          </div>
-        </div>
-      )}
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
+              {/* Run list */}
+              <div className="space-y-2">
+                {items.map((run) => (
+                  <RunListItem
+                    key={run.id}
+                    run={run}
+                    active={run.id === selected}
+                    onSelect={() => setSelected(run.id)}
+                  />
+                ))}
+                {meta && meta.pages > 1 && (
+                  <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
+                    <span>
+                      Page {meta.page}/{meta.pages}
+                    </span>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={page <= 1}
+                        onClick={() => setPage((c) => c - 1)}
+                      >
+                        Prev
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={page >= meta.pages}
+                        onClick={() => setPage((c) => c + 1)}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Detail */}
+              <div className="rounded-2xl border bg-card p-5">
+                {selected ? (
+                  <RunDetail runId={selected} />
+                ) : (
+                  <p className="py-16 text-center text-sm text-muted-foreground">
+                    Select a run to see its execution graph.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

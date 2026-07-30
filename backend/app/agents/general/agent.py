@@ -20,7 +20,7 @@ from app.workflows.state import AgentState
 _MEMORY_RECALL_LIMIT = 3
 
 
-@register_agent
+@register_agent(supervisor_routable=True)
 class GeneralAgent(BaseAgent):
     """Handles requests that do not concern the user's documents."""
 

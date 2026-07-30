@@ -9,14 +9,14 @@ Every change must pass, on both sides:
 cd backend
 ruff check .          # lint
 mypy app              # strict type-check
-pytest                # 450+ tests
+pytest                # 500+ tests
 
 # frontend
 cd frontend
 npm run lint          # eslint
 npm run type-check    # tsc --noEmit (strict)
 npm run build         # production build must succeed
-npm run test:e2e      # Playwright, seven core journeys
+npm run test:e2e      # Playwright, nine core journeys
 ```
 
 CI (`.github/workflows/ci.yml`) runs the same gates on every push and PR, in
@@ -89,8 +89,10 @@ lives in `backend/.e2e-state/` and is wiped on every start.
 
 **Scope, stated plainly:** these tests prove the *wiring* — uploads index,
 knowledge search retrieves, the supervisor routes, citations render, the
-planner writes tasks, approvals pause and resume a run, and keyword retrieval
-surfaces an exact token and labels it as such. They prove nothing
+planner writes tasks, approvals pause and resume a run, keyword retrieval
+surfaces an exact token and labels it as such, publishing a workflow version
+reroutes traffic (and rollback restores it), and run progress streams live over
+the WebSocket. They prove nothing
 about answer quality, because a stub has none. Model behaviour is out of scope
 for CI by design; the opt-in live tests below are where real providers get
 exercised.

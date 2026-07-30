@@ -51,6 +51,12 @@ designed but not yet built — see the guides.) Full design in
   Rank Fusion) so exact tokens like part numbers are findable, an optional
   cross-encoder reranking stage, context compression to a token budget, and
   optional OCR for scanned PDFs and images.
+- **Versioned workflows** — immutable graph specs that actually compile the
+  agent graph, so publishing a version changes routing and activating an older
+  one rolls it back. Runs pin the version that produced them, and clone forks
+  a workflow from its active spec.
+- **Live run status** — workflow progress streams to the browser over a
+  WebSocket as each graph node completes.
 
 ---
 
@@ -177,8 +183,10 @@ against actually-executed gate runs. As-built module detail:
 [`docs/PROJECT_ANALYSIS.md`](docs/PROJECT_ANALYSIS.md); design blueprint:
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-Not yet built (designed, not shipped): calendar agent, workflow
-versioning/rollback, visual workflow builder, WebSocket live status.
+Not yet built (designed, not shipped): calendar agent, dashboard aggregate
+endpoint, and the drag-and-drop visual workflow builder — the last of these
+deliberately, since the graph spec describes one fixed topology rather than
+arbitrary node wiring.
 
 > Chat/agent features use the Ollama model set by `LLM_MODEL` (default
 > `llama3`; `llama3.2` is a lighter alternative):

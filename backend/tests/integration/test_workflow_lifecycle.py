@@ -169,6 +169,41 @@ class TestVersioning:
         assert response.status_code == 422
         assert "wizard" in response.text
 
+    async def test_an_agent_the_supervisor_cannot_run_is_rejected(
+        self, api: AsyncClient, app: FastAPI
+    ) -> None:
+        """Regression: the catalogue used to return the whole agent registry.
+
+        The email agent is registered but is driven by the triage pipeline, not
+        the supervisor graph. A version enabling it passed validation, then
+        failed to compile on the next request and 500'd every agent call --
+        exactly what write-time validation is supposed to prevent.
+        """
+        definition = await _seed_default(api, app.state.llm)
+
+        response = await api.post(
+            f"/api/v1/workflows/definitions/{definition['id']}/versions",
+            json={"graph_spec": {"agents": ["email"], "fallback_agent": "email"}},
+        )
+
+        assert response.status_code == 422, response.text
+
+        # And the workflow still runs, on the version that was already active.
+        app.state.llm.replies = ["general", "still fine"]
+        assert (
+            await api.post("/api/v1/agents/ask", json={"message": "hey"})
+        ).status_code == 200
+
+    async def test_the_catalogue_lists_only_routable_agents(
+        self, api: AsyncClient
+    ) -> None:
+        catalogue = (
+            await api.get("/api/v1/workflows/agents-catalogue")
+        ).json()["data"]["agents"]
+
+        assert set(catalogue) == {"general", "knowledge", "planner", "research"}
+        assert "email" not in catalogue
+
     async def test_a_malformed_spec_is_rejected(
         self, api: AsyncClient, app: FastAPI
     ) -> None:

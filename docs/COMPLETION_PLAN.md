@@ -109,9 +109,10 @@ Designed in `ARCHITECTURE.md`, absent from the code:
 | §16 Six-level memory | 4 of 6 — no long-term vector memory, no user preferences |
 | FR Email agent (9-intent IMAP→draft→approve→SMTP) | Not built |
 | FR Calendar agent | Not built |
-| §20 Workflow versioning / rollback / clone | Not built (runs exist; definitions don't) |
+| §20 Workflow versioning / rollback / clone | ✅ **Built** (2026-07-30) |
 | §17 OCR, hybrid search, reranking, compression | ✅ **Built** (2026-07-30) |
-| Workflow builder UI, WebSocket live status | Not built |
+| WebSocket live status | ✅ **Built** (2026-07-30) |
+| Visual (drag-and-drop) workflow builder | Not built, deliberately — see §7b 3.4 |
 | Dashboard aggregate endpoint | Not built (UI composes 3 calls client-side) |
 
 ### F5 — Operational gaps
@@ -581,11 +582,51 @@ also how a document picks up a changed chunk size or newly-enabled OCR.
 `GET /documents/capabilities` reports the accepted extensions and size cap, so
 the frontend stops hardcoding rules that depend on server configuration.
 
-### 3.4 Workflow lifecycle (§20) + live status
+### 3.4 Workflow lifecycle (§20) + live status ✅ **DONE** (2026-07-30)
 
-`WORKFLOW_DEF` / `WORKFLOW_VERSION` tables with immutable `graph_spec`; runs pin
-a `workflow_version_id`; rollback / clone / execution history. Then the
-WebSocket manager (`app/ws/`, event-bus fan-out) and the visual builder UI.
+`workflow_definitions` / `workflow_versions` with immutable `graph_spec`
+(migration `c9f207b4e18a`); runs pin `workflow_version_id`; rollback, clone,
+per-version execution history; `/ws/runs` live status; a management UI.
+
+**The `graph_spec` is executable, not descriptive** — the one decision the rest
+rests on. `build_agent_graph` compiles *from* it, so activating a version that
+enables only the knowledge agent genuinely re-routes a "general"
+classification, and `approval_gate: false` produces a graph with no gate node
+so `require_approval` has nothing to act on. Both are asserted end to end.
+
+The spec is deliberately small (enabled agents, fallback, approval gate)
+because that is the supervisor topology this platform has. It is **not** a
+general-purpose graph DSL, and arbitrary node wiring is not supported.
+
+- Versions are immutable: no update endpoint exists, by design. Rollback is
+  activating an earlier version, which leaves newer ones in place so the
+  rollback is itself reversible.
+- Clone forks the source's *active* version, not its latest.
+- Resume uses the version the run **pinned**, not the active one — a
+  checkpoint holds node names from the original spec.
+- Specs are validated at write time against the agents this deployment can
+  route to, so an unactivatable version never reaches the database.
+
+**A real bug this surfaced and fixed:** the agent catalogue returned the whole
+registry, including the email agent, which is driven by the triage pipeline
+rather than the supervisor graph. A version enabling it passed validation and
+then 500'd every agent request — exactly what write-time validation exists to
+prevent. Agents now declare `supervisor_routable`, with a regression test.
+
+**Live status** fans the existing workflow events to browsers. These are
+published inside the executor between graph nodes, so each connection owns a
+bounded queue and the handler only does a non-blocking put: a slow client
+loses its oldest events (and is told how many) rather than stalling someone
+else's run. **Single process only** — the event bus is in-process, so a client
+on replica A never sees runs on replica B.
+
+**Not built, and not claimed:** the drag-and-drop visual builder. The UI lists
+definitions and versions, publishes a new version by selecting agents and
+toggling the gate, activates/rolls back, and clones — which is what this spec
+shape needs. A canvas editor would only be meaningful once the spec supports
+arbitrary node wiring, which it deliberately does not.
+
+55 new tests (502 total), plus e2e journeys 8 and 9.
 
 ### 3.5 Calendar agent + dashboard aggregate endpoint
 
@@ -611,7 +652,7 @@ Local-default calendar adapter with a Google adapter seam; single
 Phase 0  ✅ DONE      Green gates + auth removed
 Phase 1  ✅ DONE      Deployable, honestly documented   (1.4 blocked: no credentials)
 Phase 2  ✅ DONE      Tools ✅ · Prompts ✅ · Preferences ✅ · Memory ✅ · e2e ✅
-Phase 3  ◐ PARTIAL    Email ✅ · MCP ✅ · RAG depth ✅ · Workflow lifecycle ❌
+Phase 3  ◐ PARTIAL    Email ✅ · MCP ✅ · RAG depth ✅ · Workflow lifecycle ✅
 Phase 4  ☐ NOT STARTED Redis · Postgres checkpoints · metrics · diagrams
 ```
 

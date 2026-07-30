@@ -45,8 +45,21 @@ DEFAULT_WORKFLOW_DESCRIPTION = (
 
 
 def available_agents() -> list[str]:
-    """Agent names this process can actually route to."""
-    return sorted(entry.name for entry in agent_registry.entries())
+    """Agent names a supervisor workflow version may route to.
+
+    Filtered on the ``supervisor_routable`` registration flag rather than
+    returning the whole agent registry. The registry also holds agents driven
+    by other pipelines — the email agent runs from the triage flow (sync →
+    classify → draft) and is not a node in the supervisor graph. Offering it
+    here would let someone publish a version that passes validation and then
+    fails to compile on the next request, which is precisely what validating
+    at write time exists to prevent.
+    """
+    return sorted(
+        entry.name
+        for entry in agent_registry.entries()
+        if entry.metadata.get("supervisor_routable")
+    )
 
 
 class WorkflowLifecycleService:

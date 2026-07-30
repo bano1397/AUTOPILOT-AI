@@ -27,7 +27,7 @@ NO_RESULTS_ANSWER = (
 )
 
 
-@register_agent
+@register_agent(supervisor_routable=True)
 class ResearchAgent(BaseAgent):
     """Searches the web, reads the top results, and synthesizes an answer."""
 

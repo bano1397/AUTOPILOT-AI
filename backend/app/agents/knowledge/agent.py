@@ -14,7 +14,7 @@ from app.workflows.state import AgentState
 _TOP_K = 5
 
 
-@register_agent
+@register_agent(supervisor_routable=True)
 class KnowledgeAgent(BaseAgent):
     """Answers questions from the user's indexed documents, with citations."""
 

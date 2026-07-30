@@ -13,6 +13,9 @@ import { expect, test, type Page } from "@playwright/test";
  * proves instead (an agent badge, a citation, a status change).
  */
 
+// Must match playwright.config.ts; the browser cannot read the Node env.
+const API_URL = "http://127.0.0.1:8100";
+
 const DOC_NAME = "vacation-policy.txt";
 const DOC_TEXT = [
   "Vacation policy.",
@@ -39,12 +42,18 @@ async function uploadDocument(page: Page): Promise<void> {
  * delivered turn, which makes it the honest signal that the run finished.
  */
 async function askAgents(page: Page, message: string): Promise<string> {
+  const badges = page.getByTestId("agent-badge");
+  // The chat transcript persists across navigations, so a badge is often
+  // already on screen. Waiting for one to be *visible* would match the
+  // previous turn instantly and report the wrong agent; wait for the count to
+  // grow instead.
+  const before = await badges.count();
+
   await page.getByPlaceholder("Message the AI team…").fill(message);
   await page.keyboard.press("Enter");
 
-  const badge = page.getByTestId("agent-badge").last();
-  await expect(badge).toBeVisible({ timeout: 60_000 });
-  return ((await badge.textContent()) ?? "").trim();
+  await expect(badges).toHaveCount(before + 1, { timeout: 60_000 });
+  return ((await badges.last().textContent()) ?? "").trim();
 }
 
 test.describe("AutoPilot AI core journeys", () => {
@@ -61,16 +70,22 @@ test.describe("AutoPilot AI core journeys", () => {
     });
   });
 
-  test("2 · knowledge search returns the indexed document", async ({ page }) => {
+  test("2 · knowledge search returns the indexed document", async ({
+    page,
+  }) => {
     await page.goto("/knowledge");
 
-    await page.getByPlaceholder("Search your knowledge base…").fill("vacation days");
+    await page
+      .getByPlaceholder("Search your knowledge base…")
+      .fill("vacation days");
     // `exact` matters: the sidebar and topbar both carry a "Search… ⌘K" button.
     await page.getByRole("button", { name: "Search", exact: true }).click();
 
     // The citation carries the source filename, which is the real proof that
     // retrieval reached the document indexed in journey 1.
-    await expect(page.getByText(DOC_NAME).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(DOC_NAME).first()).toBeVisible({
+      timeout: 30_000,
+    });
   });
 
   test("3 · the assistant answers with a citation", async ({ page }) => {
@@ -83,10 +98,14 @@ test.describe("AutoPilot AI core journeys", () => {
 
     // The stub cites [1] only on the grounded prompt, so a visible citation
     // means retrieval ran and the answer was built from context.
-    await expect(page.getByText("[1]").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("[1]").first()).toBeVisible({
+      timeout: 30_000,
+    });
   });
 
-  test("4 · the supervisor routes a message to a specialist", async ({ page }) => {
+  test("4 · the supervisor routes a message to a specialist", async ({
+    page,
+  }) => {
     await page.goto("/agents");
 
     // Small talk routes to `general`. Asserting the routing badge rather than
@@ -115,7 +134,9 @@ test.describe("AutoPilot AI core journeys", () => {
     await page.goto("/agents");
 
     await page.getByRole("checkbox").first().check();
-    await page.getByPlaceholder("Message the AI team…").fill("hello with approval");
+    await page
+      .getByPlaceholder("Message the AI team…")
+      .fill("hello with approval");
     await page.keyboard.press("Enter");
 
     // The run suspends at the gate, so the turn is delivered as a draft rather
@@ -162,8 +183,70 @@ test.describe("AutoPilot AI core journeys", () => {
     await expect(page.getByText(rareToken).first()).toBeVisible({
       timeout: 30_000,
     });
-    await expect(
-      page.getByText(/^(keyword|both)$/).first(),
-    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/^(keyword|both)$/).first()).toBeVisible({
+      timeout: 30_000,
+    });
+  });
+
+  test("8 · publishing a workflow version reroutes, and rollback restores", async ({
+    page,
+  }) => {
+    // The version must be executable, not decorative: narrowing the routable
+    // agents has to change where a message actually lands.
+    await page.goto("/agents");
+    expect(await askAgents(page, "hey there!")).toBe("general");
+
+    await page.goto("/workflows");
+    await page.getByRole("tab", { name: "Definitions" }).click();
+
+    // Narrow v2 to knowledge only: deselect every other agent.
+    for (const agent of ["general", "planner", "research"]) {
+      await page.getByRole("button", { name: agent, exact: true }).click();
+    }
+    await page.getByRole("button", { name: /Publish new version/ }).click();
+    await expect(page.getByText("v2").first()).toBeVisible({ timeout: 30_000 });
+
+    // Same small talk now falls back to the only enabled agent.
+    await page.goto("/agents");
+    expect(await askAgents(page, "hey there!")).toBe("knowledge");
+
+    // Rollback: activating v1 again restores the original routing.
+    await page.goto("/workflows");
+    await page.getByRole("tab", { name: "Definitions" }).click();
+    await page
+      .getByRole("button", { name: /Activate/ })
+      .last()
+      .click();
+    await expect(page.getByText("Active").first()).toBeVisible({
+      timeout: 30_000,
+    });
+
+    await page.goto("/agents");
+    expect(await askAgents(page, "hey there!")).toBe("general");
+  });
+
+  test("9 · live status streams a run over the WebSocket", async ({ page }) => {
+    await page.goto("/workflows");
+    await expect(page.getByText("connected")).toBeVisible({ timeout: 30_000 });
+
+    // Empty until something happens — the socket carries no history.
+    await expect(page.getByText(/Waiting for activity/)).toBeVisible();
+
+    // Trigger a run from the page so the open socket receives it live.
+    await page.evaluate(async (apiUrl) => {
+      await fetch(`${apiUrl}/api/v1/agents/ask`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "live status check" }),
+      });
+    }, API_URL);
+
+    // Frames arrive without any refetch: the ticker fills in on its own.
+    await expect(page.getByText("started").first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByText("completed").first()).toBeVisible({
+      timeout: 30_000,
+    });
   });
 });

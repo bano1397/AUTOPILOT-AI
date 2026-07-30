@@ -64,11 +64,11 @@ class VectorSearchTool:
         return VectorSearchOut(
             matches=[
                 VectorSearchMatch(
-                    document_id=str(match.metadata.get("document_id", "")),
-                    filename=str(match.metadata.get("filename", "")),
-                    chunk_index=int(match.metadata.get("chunk_index", 0)),
+                    document_id=match.document_id,
+                    filename=match.filename,
+                    chunk_index=match.chunk_index,
                     text=match.text,
-                    distance=match.distance,
+                    distance=match.distance if match.distance is not None else 1.0,
                 )
                 for match in matches
             ]

@@ -34,7 +34,7 @@ async def query_documents(
     return ApiResponse(
         data=RagQueryRead(
             query=payload.query,
-            matches=[RagMatchRead.from_vector_match(match) for match in matches],
+            matches=[RagMatchRead.from_chunk(match) for match in matches],
         )
     )
 
@@ -54,6 +54,6 @@ async def ask_documents(
             answer=result.answer,
             grounded=result.grounded,
             model=result.model,
-            sources=[RagMatchRead.from_vector_match(match) for match in result.matches],
+            sources=[RagMatchRead.from_chunk(match) for match in result.matches],
         )
     )

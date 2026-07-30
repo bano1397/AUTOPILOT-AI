@@ -17,6 +17,7 @@ from app.domain.interfaces.database import DatabaseProvider
 from app.domain.interfaces.embedding import EmbeddingProvider
 from app.domain.interfaces.event_bus import EventBus
 from app.domain.interfaces.llm import LLMProvider
+from app.domain.interfaces.rerank import RerankProvider
 from app.domain.interfaces.search import SearchProvider
 from app.domain.interfaces.storage import StorageProvider
 from app.domain.interfaces.vector_store import VectorStoreProvider
@@ -55,6 +56,15 @@ def get_memory_vector_store(request: Request) -> VectorStoreProvider:
 def get_llm(request: Request) -> LLMProvider:
     """Return the application-scoped LLM provider."""
     return cast(LLMProvider, request.app.state.llm)
+
+
+def get_reranker(request: Request) -> RerankProvider:
+    """Return the application-scoped reranking provider.
+
+    Always present: when RERANK_PROVIDER is unset this is the pass-through
+    implementation, so callers never branch on whether reranking exists.
+    """
+    return cast(RerankProvider, request.app.state.reranker)
 
 
 def get_search(request: Request) -> SearchProvider:

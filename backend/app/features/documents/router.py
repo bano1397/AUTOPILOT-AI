@@ -65,6 +65,21 @@ async def get_document(
     return ApiResponse(data=DocumentRead.model_validate(document))
 
 
+@router.post("/{document_id}/reindex", response_model=ApiResponse[DocumentRead])
+async def reindex_document(
+    document_id: UUID,
+    workspace_user: User = Depends(get_workspace_user),
+    service: DocumentService = Depends(get_document_service),
+) -> ApiResponse[DocumentRead]:
+    """Re-run ingestion over the stored file, keeping the document id.
+
+    Use after changing chunk size, enabling OCR, or to give a document indexed
+    before hybrid search the persisted chunk text keyword search needs.
+    """
+    document = await service.reindex_document(workspace_user, document_id)
+    return ApiResponse(data=DocumentRead.model_validate(document))
+
+
 @router.delete("/{document_id}", response_model=ApiResponse[MessageResponse])
 async def delete_document(
     document_id: UUID,

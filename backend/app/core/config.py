@@ -100,6 +100,22 @@ class Settings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 200
 
+    # Hybrid retrieval (blueprint §17): vector + BM25 keyword, fused with RRF.
+    # Disable to fall back to vector-only retrieval.
+    rag_hybrid_enabled: bool = True
+    # How many keyword candidates the SQL prefilter may return before BM25
+    # scores them. Caps an unindexed LIKE scan; raising it trades query latency
+    # for recall on large corpora.
+    rag_keyword_candidates: int = 200
+    # Token budget for retrieved context in a grounded answer. Counted with an
+    # estimator, not a tokenizer -- see app/platform/rag/compression.py.
+    rag_context_budget_tokens: int = 2000
+
+    # OCR for scanned documents. Off by default: it needs the Tesseract binary,
+    # which is a system package rather than a Python dependency.
+    ocr_enabled: bool = False
+    ocr_languages: str = "eng"
+
     # --- AI providers --------------------------------------------------------
     # Which implementation backs each port. Defaults keep everything local
     # (Ollama + Chroma); the cloud values (groq / jina / qdrant) are selected by
@@ -135,6 +151,15 @@ class Settings(BaseSettings):
     # Cloud embeddings (Jina AI — free tier)
     jina_api_key: str | None = None
     jina_model: str = "jina-embeddings-v3"
+
+    # Reranking. `none` is a genuine pass-through, not a degraded reranker:
+    # there is no honest local cross-encoder, so the stage is simply absent
+    # unless configured. `jina` reuses JINA_API_KEY.
+    rerank_provider: str = "none"  # none | jina
+    jina_rerank_model: str = "jina-reranker-v2-base-multilingual"
+    # Candidates handed to the reranker; it returns the best `top_k` of these.
+    # Reranking is only worth its latency with more candidates than answers.
+    rerank_candidates: int = 20
 
     # Cloud vector store (Qdrant — free managed tier)
     qdrant_url: str | None = None

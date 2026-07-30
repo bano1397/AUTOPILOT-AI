@@ -5,11 +5,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from app.domain.interfaces.llm import ChatMessage, ChatRole
-from app.domain.interfaces.vector_store import VectorMatch
 from app.platform.prompts.catalog import (
     EMAIL_CLASSIFY_SYSTEM_PROMPT,
     EMAIL_DRAFT_SYSTEM_PROMPT,
 )
+from app.platform.rag.types import RetrievedChunk
 
 
 def build_classify_messages(sender: str, subject: str, body: str) -> list[ChatMessage]:
@@ -28,12 +28,12 @@ def build_draft_messages(
     subject: str,
     body: str,
     intent: str,
-    matches: Sequence[VectorMatch] = (),
+    matches: Sequence[RetrievedChunk] = (),
 ) -> list[ChatMessage]:
     """Build the reply-drafting prompt, grounded in retrieved context if any."""
     if matches:
         context = "\n\n".join(
-            f"[{position}] {match.metadata.get('filename', 'document')}:\n{match.text}"
+            f"[{position}] {match.filename or 'document'}:\n{match.text}"
             for position, match in enumerate(matches, start=1)
         )
         grounding = (

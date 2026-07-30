@@ -1,4 +1,4 @@
-"""Document use-cases: secure upload, listing, retrieval, deletion."""
+"""Document use-cases: secure upload, listing, retrieval, re-indexing, deletion."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
 from app.core.logging import get_logger
 from app.core.pagination import PaginationParams
-from app.domain.events import DocumentUploaded
+from app.domain.events import DocumentReindexRequested, DocumentUploaded
 from app.domain.interfaces.event_bus import EventBus
 from app.domain.interfaces.storage import StorageProvider
 from app.domain.interfaces.vector_store import VectorStoreProvider
@@ -81,6 +81,21 @@ class DocumentService:
         document = await self._documents.get_for_user(document_id, user.id)
         if document is None:
             raise NotFoundError("Document not found")
+        return document
+
+    async def reindex_document(self, user: User, document_id: UUID) -> Document:
+        """Ask for the document to be ingested again; emit the request event.
+
+        Ownership is checked here so the handler can trust the id. The rebuild
+        itself is the ingestion pipeline's job -- this method only asks.
+        """
+        document = await self.get_document(user, document_id)
+        await self._event_bus.publish(
+            DocumentReindexRequested(
+                document_id=str(document.id), user_id=str(user.id)
+            )
+        )
+        await self._session.refresh(document)
         return document
 
     async def delete_document(self, user: User, document_id: UUID) -> None:

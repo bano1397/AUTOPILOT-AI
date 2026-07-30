@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.features.documents.models import Document, DocumentChunk
@@ -79,6 +79,43 @@ class DocumentRepository:
         await self._session.execute(
             delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
         )
+
+    async def search_chunk_text(
+        self, user_id: UUID, terms: Sequence[str], *, limit: int
+    ) -> list[tuple[DocumentChunk, str]]:
+        """Owner-scoped chunks whose text contains any of ``terms``.
+
+        This is a *candidate* prefilter, not the ranking: BM25 scores what comes
+        back (see ``app.platform.rag.keyword``). Splitting it this way keeps the
+        scoring portable — SQLite and Postgres disagree entirely on full-text
+        search, and neither dialect's implementation would be reachable from a
+        plain SQLAlchemy query without dialect-specific DDL.
+
+        The cost is a ``LIKE`` scan with no index, so this is linear in the
+        number of chunks. Fine for the thousands a workspace of documents
+        produces; the point at which it stops being fine is the point at which
+        the prefilter should move to Postgres ``tsvector`` behind this same
+        method.
+
+        Chunks written before the full-text column existed have ``content``
+        NULL and cannot match — they stay vector-searchable, and re-indexing
+        the document restores them.
+        """
+        if not terms:
+            return []
+        # Terms come from `tokenize()`, so they are alphanumeric and cannot
+        # carry LIKE wildcards.
+        result = await self._session.execute(
+            select(DocumentChunk, Document.filename)
+            .join(Document, Document.id == DocumentChunk.document_id)
+            .where(
+                Document.user_id == user_id,
+                DocumentChunk.content.is_not(None),
+                or_(*[DocumentChunk.content.ilike(f"%{term}%") for term in terms]),
+            )
+            .limit(limit)
+        )
+        return [(row[0], row[1]) for row in result.all()]
 
     async def chunk_vector_ids(self, document_id: UUID) -> list[str]:
         result = await self._session.execute(

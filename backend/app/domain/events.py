@@ -56,6 +56,18 @@ class DocumentUploaded(DomainEvent):
     user_id: str
 
 
+class DocumentReindexRequested(DomainEvent):
+    """Re-run ingestion for an already-stored document.
+
+    Separate from :class:`DocumentUploaded` because the handler must first tear
+    down the previous chunks and vectors; conflating the two would make an
+    ordinary upload capable of deleting an indexed document's data.
+    """
+
+    document_id: str
+    user_id: str
+
+
 class DocumentIndexed(DomainEvent):
     document_id: str
     chunk_count: int

@@ -3,18 +3,24 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import pytest_asyncio
 from app.features.preferences.models import WorkspacePreferences
 from app.infrastructure.database.sqlalchemy_provider import SqlAlchemyDatabaseProvider
+from app.infrastructure.storage import LocalStorageProvider
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 
 
 @pytest_asyncio.fixture
-async def api(app: FastAPI, db: SqlAlchemyDatabaseProvider) -> AsyncIterator[AsyncClient]:
+async def api(
+    app: FastAPI, db: SqlAlchemyDatabaseProvider, tmp_path: Path
+) -> AsyncIterator[AsyncClient]:
     app.state.db = db
+    # Uploads in this module must land in a tmp dir, not the repo's ./documents.
+    app.state.storage = LocalStorageProvider(tmp_path / "docs")
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
@@ -82,37 +88,50 @@ async def test_validation_bounds(api: AsyncClient) -> None:
 class TestPreferencesAffectBehavior:
     """A preference nobody reads is decoration; these pin the wiring."""
 
+    # These assert the *returned* result count, not the vector store's top_k.
+    # Hybrid retrieval deliberately over-retrieves (RERANK_CANDIDATES) so
+    # fusion and reranking have candidates to work with, so the store's top_k
+    # is no longer a proxy for the preference -- the answer size is.
+
+    async def _seed_chunks(self, api: AsyncClient, app: FastAPI, count: int) -> None:
+        from app.infrastructure.vectorstore import InMemoryVectorStore
+
+        from tests.fakes import FakeEmbeddingProvider
+
+        app.state.embeddings = FakeEmbeddingProvider()
+        app.state.vector_store = InMemoryVectorStore()
+        # chunk_size defaults to 1000 chars; distinct words per chunk keep the
+        # keyword half from collapsing them into near-duplicates.
+        text = "\n\n".join(f"section{index} " + "filler " * 200 for index in range(count))
+        response = await api.post(
+            "/api/v1/documents",
+            files={"file": ("seed.txt", text.encode(), "text/plain")},
+        )
+        assert response.status_code == 201, response.text
+
     async def test_rag_query_uses_default_top_k_when_omitted(
         self, api: AsyncClient, app: FastAPI, db: SqlAlchemyDatabaseProvider
     ) -> None:
-        from tests.fakes import FakeEmbeddingProvider, FakeVectorStore
-
-        vectors = FakeVectorStore()
-        app.state.embeddings = FakeEmbeddingProvider()
-        app.state.vector_store = vectors
+        await self._seed_chunks(api, app, count=30)
         await api.patch("/api/v1/preferences", json={"default_top_k": 9})
 
-        response = await api.post("/api/v1/rag/query", json={"query": "anything"})
+        response = await api.post("/api/v1/rag/query", json={"query": "filler"})
 
         assert response.status_code == 200, response.text
-        assert vectors.last_top_k == 9
+        assert len(response.json()["data"]["matches"]) == 9
 
     async def test_explicit_top_k_still_wins(
         self, api: AsyncClient, app: FastAPI, db: SqlAlchemyDatabaseProvider
     ) -> None:
-        from tests.fakes import FakeEmbeddingProvider, FakeVectorStore
-
-        vectors = FakeVectorStore()
-        app.state.embeddings = FakeEmbeddingProvider()
-        app.state.vector_store = vectors
+        await self._seed_chunks(api, app, count=30)
         await api.patch("/api/v1/preferences", json={"default_top_k": 9})
 
         response = await api.post(
-            "/api/v1/rag/query", json={"query": "anything", "top_k": 2}
+            "/api/v1/rag/query", json={"query": "filler", "top_k": 2}
         )
 
         assert response.status_code == 200
-        assert vectors.last_top_k == 2
+        assert len(response.json()["data"]["matches"]) == 2
 
     async def test_disabling_notifications_suppresses_dispatch(
         self, api: AsyncClient, db: SqlAlchemyDatabaseProvider

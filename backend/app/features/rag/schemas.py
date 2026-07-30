@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from app.domain.interfaces.vector_store import VectorMatch
+from app.platform.rag.types import RetrievedChunk
 
 
 class RagQueryRequest(BaseModel):
@@ -24,22 +24,31 @@ class RagAskRequest(BaseModel):
 
 
 class RagMatchRead(BaseModel):
-    """One retrieved chunk with its citation."""
+    """One retrieved chunk with its citation and how it was found."""
 
     document_id: str
     filename: str
     chunk_index: int
     text: str
-    distance: float
+    # Which retriever(s) surfaced this chunk: "vector", "keyword", or "hybrid".
+    retrieval: str = "vector"
+    # Ordering score within this result set (RRF, or the reranker's score).
+    # Not comparable across queries.
+    score: float = 0.0
+    # Cosine distance, present only when a vector retriever saw this chunk.
+    # None for keyword-only hits, where any number would be invented.
+    distance: float | None = None
 
     @classmethod
-    def from_vector_match(cls, match: VectorMatch) -> RagMatchRead:
+    def from_chunk(cls, chunk: RetrievedChunk) -> RagMatchRead:
         return cls(
-            document_id=str(match.metadata.get("document_id", "")),
-            filename=str(match.metadata.get("filename", "")),
-            chunk_index=int(match.metadata.get("chunk_index", 0)),
-            text=match.text,
-            distance=match.distance,
+            document_id=chunk.document_id,
+            filename=chunk.filename,
+            chunk_index=chunk.chunk_index,
+            text=chunk.text,
+            retrieval=chunk.source.value,
+            score=round(chunk.score, 6),
+            distance=chunk.distance,
         )
 
 

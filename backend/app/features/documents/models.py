@@ -6,7 +6,7 @@ import enum
 import uuid
 from typing import Any
 
-from sqlalchemy import JSON, Enum, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -62,9 +62,14 @@ class Document(UUIDMixin, TimestampMixin, Base):
 class DocumentChunk(UUIDMixin, TimestampMixin, Base):
     """One chunk of an ingested document (blueprint ERD).
 
-    The database keeps a preview for display/citation; the vector store holds
-    the full chunk text. ``vector_id`` links the two (filled by the indexing
-    stage; NULL until then).
+    The database keeps the full chunk text alongside a short preview for list
+    views; the vector store holds the same text next to its embedding.
+    ``vector_id`` links the two (filled by the indexing stage; NULL until then).
+
+    Duplicating the text is deliberate. Keyword search (blueprint §17) needs to
+    scan and score chunk text, and neither Chroma nor Qdrant offers portable
+    BM25 — so the relational copy is what makes hybrid retrieval possible
+    without coupling the pipeline to one vector backend.
     """
 
     __tablename__ = "document_chunks"
@@ -77,6 +82,10 @@ class DocumentChunk(UUIDMixin, TimestampMixin, Base):
     )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     vector_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Full chunk text. Nullable because chunks written before hybrid search
+    # existed have no copy: those documents are vector-searchable but invisible
+    # to keyword search until re-indexed (POST /documents/{id}/reindex).
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
     content_preview: Mapped[str] = mapped_column(String(500), nullable=False)
     chunk_metadata: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSON, default=dict, nullable=False

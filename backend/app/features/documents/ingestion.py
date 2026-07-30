@@ -101,6 +101,52 @@ class IngestionService:
                 DocumentIndexed(document_id=str(document_id), chunk_count=len(chunks))
             )
 
+    async def reindex(self, document_id: UUID) -> None:
+        """Discard a document's chunks and vectors, then ingest it again.
+
+        Needed because ingestion output depends on configuration that changes
+        over time: chunk size, whether OCR is enabled, and — for anything
+        indexed before hybrid search landed — whether the chunk text was
+        persisted at all. Without this the only way to pick up those changes is
+        to delete and re-upload, which loses the document id every citation
+        already points at.
+
+        Old vectors are removed *before* re-ingesting rather than overwritten:
+        re-chunking usually produces a different number of chunks with new row
+        ids, so stale vectors would otherwise linger and keep matching.
+        """
+        async with self._db.session() as session:
+            repository = DocumentRepository(session)
+            document = await repository.get_by_id(document_id)
+            if document is None:
+                logger.warning(
+                    "reindex.document_missing", extra={"document_id": str(document_id)}
+                )
+                return
+
+            vector_ids = await repository.chunk_vector_ids(document_id)
+            await repository.delete_chunks(document_id)
+            # Back to the start of the lifecycle so ingest()'s idempotency
+            # guard admits it.
+            document.status = DocumentStatus.UPLOADED
+            document.doc_metadata = {
+                key: value
+                for key, value in document.doc_metadata.items()
+                if key not in ("error", "chunk_count")
+            }
+            await session.commit()
+
+        if vector_ids:
+            try:
+                await self._vector_store.delete(vector_ids)
+            except Exception:  # noqa: BLE001 - a stale vector must not block the rebuild
+                logger.warning(
+                    "reindex.vector_delete_failed",
+                    extra={"document_id": str(document_id), "count": len(vector_ids)},
+                )
+
+        await self.ingest(document_id)
+
     async def _process(
         self, document: Document, repository: DocumentRepository
     ) -> list[DocumentChunk]:
@@ -120,6 +166,7 @@ class IngestionService:
             DocumentChunk(
                 document_id=document.id,
                 chunk_index=chunk.index,
+                content=chunk.text,
                 content_preview=chunk.text[:_PREVIEW_CHARS],
                 chunk_metadata={"chars": len(chunk.text)},
             )

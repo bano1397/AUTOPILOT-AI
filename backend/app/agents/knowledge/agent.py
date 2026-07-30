@@ -42,7 +42,7 @@ class KnowledgeAgent(BaseAgent):
             "model": result.model,
             "grounded": result.grounded,
             "sources": [
-                RagMatchRead.from_vector_match(match).model_dump()
+                RagMatchRead.from_chunk(match).model_dump()
                 for match in result.matches
             ],
         }

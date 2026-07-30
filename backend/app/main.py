@@ -21,9 +21,14 @@ from app.core.config import Settings, get_settings
 from app.core.error_handlers import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
 from app.core.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
-from app.domain.events import DocumentUploaded, DomainEvent
+from app.domain.events import (
+    DocumentReindexRequested,
+    DocumentUploaded,
+    DomainEvent,
+)
 from app.domain.interfaces.embedding import EmbeddingProvider
 from app.domain.interfaces.llm import LLMProvider
+from app.domain.interfaces.rerank import RerankProvider
 from app.domain.interfaces.storage import StorageProvider
 from app.domain.interfaces.vector_store import VectorStoreProvider
 from app.features.documents.ingestion import IngestionService
@@ -43,6 +48,7 @@ from app.infrastructure.llm import (
     OllamaLLMProvider,
     StubLLMProvider,
 )
+from app.infrastructure.rerank import JinaRerankProvider, NoopRerankProvider
 from app.infrastructure.search import DuckDuckGoSearchProvider
 from app.infrastructure.storage import LocalStorageProvider, S3StorageProvider
 from app.infrastructure.vectorstore import (
@@ -87,6 +93,17 @@ def _build_embeddings(settings: Settings) -> EmbeddingProvider:
     return OllamaEmbeddingProvider(
         base_url=settings.ollama_base_url, model=settings.embedding_model
     )
+
+
+def _build_reranker(settings: Settings) -> RerankProvider:
+    """Select the reranker from config; the default is a genuine pass-through."""
+    if settings.rerank_provider == "jina":
+        if not settings.jina_api_key:
+            raise ValueError("RERANK_PROVIDER=jina requires JINA_API_KEY")
+        return JinaRerankProvider(
+            api_key=settings.jina_api_key, model=settings.jina_rerank_model
+        )
+    return NoopRerankProvider()
 
 
 def _build_email_reader(settings: Settings) -> ImapEmailReader | None:
@@ -224,6 +241,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings, settings.memory_collection
     )
     app.state.llm = _build_llm(settings)
+    app.state.reranker = _build_reranker(settings)
     app.state.search = DuckDuckGoSearchProvider()
     app.state.email_reader = _build_email_reader(settings)
     app.state.email_sender = _build_email_sender(settings)
@@ -246,6 +264,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await service.ingest(UUID(event.document_id))
 
     event_bus.subscribe(DocumentUploaded, _on_document_uploaded)
+
+    # Re-indexing reuses the same pipeline, preceded by tearing down the
+    # document's previous chunks and vectors.
+    async def _on_reindex_requested(event: DomainEvent) -> None:
+        if isinstance(event, DocumentReindexRequested):
+            service = IngestionService(
+                db=app.state.db,
+                storage=app.state.storage,
+                embeddings=app.state.embeddings,
+                vector_store=app.state.vector_store,
+                bus=event_bus,
+            )
+            await service.reindex(UUID(event.document_id))
+
+    event_bus.subscribe(DocumentReindexRequested, _on_reindex_requested)
 
     # Event-driven notifications: approvals, failures, and indexing completions
     # fan out to every configured channel (in-app always; Telegram/SMTP by env).

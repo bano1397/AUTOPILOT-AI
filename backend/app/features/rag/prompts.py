@@ -9,22 +9,23 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from app.domain.interfaces.llm import ChatMessage, ChatRole, history_to_messages
-from app.domain.interfaces.vector_store import VectorMatch
 from app.platform.prompts.catalog import SYSTEM_PROMPT
+from app.platform.rag.types import RetrievedChunk
 
 
-def _format_context(matches: Sequence[VectorMatch]) -> str:
+def _format_context(matches: Sequence[RetrievedChunk]) -> str:
     blocks: list[str] = []
     for position, match in enumerate(matches, start=1):
-        filename = str(match.metadata.get("filename", "document"))
-        chunk_index = int(match.metadata.get("chunk_index", 0))
-        blocks.append(f"[{position}] {filename} (part {chunk_index + 1}):\n{match.text}")
+        filename = match.filename or "document"
+        blocks.append(
+            f"[{position}] {filename} (part {match.chunk_index + 1}):\n{match.text}"
+        )
     return "\n\n".join(blocks)
 
 
 def build_ask_messages(
     question: str,
-    matches: Sequence[VectorMatch],
+    matches: Sequence[RetrievedChunk],
     history: Sequence[dict[str, str]] = (),
 ) -> list[ChatMessage]:
     """Build the grounded chat prompt for a question and its retrieved context.

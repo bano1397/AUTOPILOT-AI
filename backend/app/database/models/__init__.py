@@ -15,7 +15,13 @@ from app.features.notifications.models import Notification
 from app.features.preferences.models import WorkspacePreferences
 from app.features.tasks.models import Task, TaskPriority, TaskStatus
 from app.features.users.models import User
-from app.features.workflows.models import WorkflowRun, WorkflowRunStatus, WorkflowStep
+from app.features.workflows.models import (
+    WorkflowDefinition,
+    WorkflowRun,
+    WorkflowRunStatus,
+    WorkflowStep,
+    WorkflowVersion,
+)
 from app.platform.observability.models import AiExecution
 
 __all__ = [
@@ -39,7 +45,9 @@ __all__ = [
     "TaskPriority",
     "TaskStatus",
     "User",
+    "WorkflowDefinition",
     "WorkflowRun",
     "WorkflowRunStatus",
     "WorkflowStep",
+    "WorkflowVersion",
 ]

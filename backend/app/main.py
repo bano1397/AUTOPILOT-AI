@@ -61,6 +61,8 @@ from app.platform.events import InProcessEventBus
 from app.platform.observability.recorder import AiExecutionRecorder
 from app.platform.registry import discover_plugins
 from app.workflows.checkpointer import WorkflowCheckpointer
+from app.ws import WorkflowEventStream
+from app.ws import router as ws_router
 
 
 def _build_llm(settings: Settings) -> LLMProvider:
@@ -242,6 +244,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.llm = _build_llm(settings)
     app.state.reranker = _build_reranker(settings)
+    # Live run status: bridges the in-process event bus to WebSocket clients.
+    event_stream = WorkflowEventStream()
+    event_stream.subscribe_to(event_bus)
+    app.state.event_stream = event_stream
     app.state.search = DuckDuckGoSearchProvider()
     app.state.email_reader = _build_email_reader(settings)
     app.state.email_sender = _build_email_sender(settings)
@@ -301,6 +307,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Unversioned system endpoints + versioned API surface.
     app.include_router(system_router)
+    app.include_router(ws_router)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
 
     # Consistent error envelope for all endpoints.

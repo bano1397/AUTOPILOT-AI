@@ -75,6 +75,7 @@ class WorkflowExecutor:
         initial_state: Mapping[str, Any],
         input_payload: dict[str, Any] | None = None,
         output_builder: OutputBuilder | None = None,
+        workflow_version_id: UUID | None = None,
     ) -> ExecutionOutcome:
         """Run ``graph`` as a persistent workflow run.
 
@@ -82,7 +83,9 @@ class WorkflowExecutor:
         failures are recorded on the run and re-raised so API error handling
         applies unchanged.
         """
-        run_id = await self._create_run(user_id, workflow_name, input_payload)
+        run_id = await self._create_run(
+            user_id, workflow_name, input_payload, workflow_version_id
+        )
         await self._bus.publish(
             WorkflowStarted(
                 run_id=str(run_id), workflow_name=workflow_name, user_id=str(user_id)
@@ -239,6 +242,12 @@ class WorkflowExecutor:
             "workflow.failed", extra={"run_id": str(run_id), "workflow": workflow_name}
         )
 
+    async def version_id_for_run(self, run_id: UUID) -> UUID | None:
+        """The workflow version a run pinned, if any."""
+        async with self._db.session() as session:
+            run = await WorkflowRunRepository(session).get(run_id)
+            return run.workflow_version_id if run else None
+
     async def _run_progress(self, run_id: UUID) -> tuple[int, int]:
         """Return (next step position, accumulated duration) for a run."""
         async with self._db.session() as session:
@@ -248,12 +257,19 @@ class WorkflowExecutor:
             return len(steps), (run.duration_ms or 0) if run else 0
 
     async def _create_run(
-        self, user_id: UUID, workflow_name: str, input_payload: dict[str, Any] | None
+        self,
+        user_id: UUID,
+        workflow_name: str,
+        input_payload: dict[str, Any] | None,
+        workflow_version_id: UUID | None = None,
     ) -> UUID:
         async with self._db.session() as session:
             run = await WorkflowRunRepository(session).add(
                 WorkflowRun(
-                    user_id=user_id, workflow_name=workflow_name, input=input_payload
+                    user_id=user_id,
+                    workflow_name=workflow_name,
+                    input=input_payload,
+                    workflow_version_id=workflow_version_id,
                 )
             )
             await session.commit()

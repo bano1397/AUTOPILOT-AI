@@ -9,14 +9,14 @@ Every change must pass, on both sides:
 cd backend
 ruff check .          # lint
 mypy app              # strict type-check
-pytest                # 370+ tests
+pytest                # 460+ tests
 
 # frontend
 cd frontend
 npm run lint          # eslint
 npm run type-check    # tsc --noEmit (strict)
 npm run build         # production build must succeed
-npm run test:e2e      # Playwright, six core journeys
+npm run test:e2e      # Playwright, seven core journeys
 ```
 
 CI (`.github/workflows/ci.yml`) runs the same gates on every push and PR, in
@@ -59,6 +59,18 @@ Ollama + ChromaDB. They are skipped unless enabled:
 AUTOPILOT_EXTERNAL_TESTS=1 pytest tests/integration/test_external_providers.py
 ```
 
+`tests/unit/test_ocr.py` splits the same way. The configuration gating and
+degradation paths run everywhere; the tests that actually invoke Tesseract are
+opt-in, because OCR needs a system binary pip cannot install:
+
+```bash
+pip install -e '.[ocr]' && AUTOPILOT_OCR_TESTS=1 pytest tests/unit/test_ocr.py
+```
+
+They pass against Tesseract 5.5.0 — including reading text back out of a
+generated image and the scanned-PDF fallback. CI runs the suite without
+Tesseract, so those three skip there.
+
 ## End-to-end tests
 
 `frontend/e2e/` drives a real browser against a **real backend** — one
@@ -77,7 +89,8 @@ lives in `backend/.e2e-state/` and is wiped on every start.
 
 **Scope, stated plainly:** these tests prove the *wiring* — uploads index,
 knowledge search retrieves, the supervisor routes, citations render, the
-planner writes tasks, approvals pause and resume a run. They prove nothing
+planner writes tasks, approvals pause and resume a run, and keyword retrieval
+surfaces an exact token and labels it as such. They prove nothing
 about answer quality, because a stub has none. Model behaviour is out of scope
 for CI by design; the opt-in live tests below are where real providers get
 exercised.

@@ -5,10 +5,12 @@ import { Loader2, UploadCloud } from "lucide-react";
 import { type DragEvent, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { useUploadDocument } from "@/features/documents/hooks";
 import {
-  ALLOWED_EXTENSIONS,
-  MAX_UPLOAD_SIZE_MB,
+  useUploadCapabilities,
+  useUploadDocument,
+} from "@/features/documents/hooks";
+import {
+  DEFAULT_UPLOAD_RULES,
   validateFile,
 } from "@/features/documents/validation";
 import { ApiError } from "@/lib/api/types";
@@ -19,11 +21,20 @@ export function DocumentDropzone() {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(0);
   const upload = useUploadDocument();
+  // Server-reported rules; the static defaults cover the first render and any
+  // failure to reach the endpoint.
+  const capabilities = useUploadCapabilities();
+  const rules = capabilities.data
+    ? {
+        allowedExtensions: capabilities.data.allowed_extensions,
+        maxUploadSizeMb: capabilities.data.max_upload_size_mb,
+      }
+    : DEFAULT_UPLOAD_RULES;
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     for (const file of Array.from(files)) {
-      const problem = validateFile(file);
+      const problem = validateFile(file, rules);
       if (problem) {
         toast.error(`${file.name}: ${problem}`);
         continue;
@@ -73,7 +84,7 @@ export function DocumentDropzone() {
         ref={inputRef}
         type="file"
         multiple
-        accept={ALLOWED_EXTENSIONS.join(",")}
+        accept={rules.allowedExtensions.join(",")}
         className="hidden"
         onChange={(event) => {
           void handleFiles(event.target.files);
@@ -98,7 +109,8 @@ export function DocumentDropzone() {
             : "Drag & drop files, or click to browse"}
       </p>
       <p className="text-xs text-muted-foreground">
-        {ALLOWED_EXTENSIONS.join(", ")} · up to {MAX_UPLOAD_SIZE_MB} MB each
+        {rules.allowedExtensions.join(", ")} · up to {rules.maxUploadSizeMb} MB
+        each
       </p>
       {busy && (
         <div className="mt-1 h-1 w-40 overflow-hidden rounded-full bg-muted">

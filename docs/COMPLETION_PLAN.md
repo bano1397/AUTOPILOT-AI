@@ -110,7 +110,7 @@ Designed in `ARCHITECTURE.md`, absent from the code:
 | FR Email agent (9-intent IMAP→draft→approve→SMTP) | Not built |
 | FR Calendar agent | Not built |
 | §20 Workflow versioning / rollback / clone | Not built (runs exist; definitions don't) |
-| §17 OCR, hybrid search, reranking, compression | Not built (chunk→embed→vector only) |
+| §17 OCR, hybrid search, reranking, compression | ✅ **Built** (2026-07-30) |
 | Workflow builder UI, WebSocket live status | Not built |
 | Dashboard aggregate endpoint | Not built (UI composes 3 calls client-side) |
 
@@ -540,11 +540,46 @@ notification provider is already written) → persist. New feature module
 - Security: explicit server allow-list, per-tool permissions, all tool output
   treated as untrusted data (never as instructions).
 
-### 3.3 RAG depth (§17)
+### 3.3 RAG depth (§17) ✅ **DONE** (2026-07-30)
 
-OCR stage (Tesseract behind a provider port) → hybrid search (vector + keyword,
-RRF fusion) → reranking → context compression to a token budget. Each a
-swappable stage, each independently testable.
+Built as specified: OCR → hybrid search (vector + BM25, RRF fusion) →
+reranking → context compression, each swappable and independently tested.
+
+- **Hybrid search.** `document_chunks.content` (migration `b8e3f1c05a72`) makes
+  the chunk text scoreable in SQL; BM25 ranks the prefiltered candidates and
+  RRF fuses the two rankings. RRF rather than score normalisation because
+  cosine distance and BM25 share no scale, and any weighting would silently
+  depend on the embedding model and the corpus.
+- **Reranking.** `RerankProvider` port, real Jina cross-encoder
+  (`RERANK_PROVIDER=jina`, reuses `JINA_API_KEY`), pass-through default.
+  Deliberately no local heuristic reranker: term overlap dressed up as
+  reranking would undo fusion while looking like an improvement.
+- **Compression.** Near-duplicate removal (chunk overlap means adjacent
+  windows genuinely share text) then greedy fill by rank. Token counts are an
+  estimate with a pessimistic divisor, not a tokenizer.
+- **OCR.** Tesseract behind the existing `TextExtractor` port, off by default
+  because it needs a system binary. Text-free PDFs fall back to it; `.png` /
+  `.jpg` uploads are accepted only when it is enabled.
+
+**Stated limits.** The keyword prefilter is an unindexed `LIKE` scan, linear in
+chunk count (`RAG_KEYWORD_CANDIDATES` caps it); the upgrade path is Postgres
+`tsvector` behind the same repository method. BM25 IDF is computed over the
+candidate set rather than the corpus, so ranking is directionally right but
+scores are not comparable to a corpus-wide implementation — only the ranking
+feeds fusion.
+
+**Verification.** 90 new tests. The real-Tesseract tests are opt-in
+(`AUTOPILOT_OCR_TESTS=1`) and pass against Tesseract 5.5.0, including reading
+text back out of a generated image and the scanned-PDF fallback. The Jina
+reranker is tested against `MockTransport` only — **unverified against the real
+API**, like every other cloud provider here.
+
+**Also added**, because the migration could not backfill chunk text without
+coupling schema migration to a live vector store: `POST /documents/{id}/reindex`
+rebuilds a document in place, keeping the id every citation points at. It is
+also how a document picks up a changed chunk size or newly-enabled OCR.
+`GET /documents/capabilities` reports the accepted extensions and size cap, so
+the frontend stops hardcoding rules that depend on server configuration.
 
 ### 3.4 Workflow lifecycle (§20) + live status
 
@@ -576,7 +611,7 @@ Local-default calendar adapter with a Google adapter seam; single
 Phase 0  ✅ DONE      Green gates + auth removed
 Phase 1  ✅ DONE      Deployable, honestly documented   (1.4 blocked: no credentials)
 Phase 2  ✅ DONE      Tools ✅ · Prompts ✅ · Preferences ✅ · Memory ✅ · e2e ✅
-Phase 3  ◐ PARTIAL    Email ✅ · MCP ✅ · RAG depth ❌ · Workflow lifecycle ❌
+Phase 3  ◐ PARTIAL    Email ✅ · MCP ✅ · RAG depth ✅ · Workflow lifecycle ❌
 Phase 4  ☐ NOT STARTED Redis · Postgres checkpoints · metrics · diagrams
 ```
 
@@ -590,7 +625,7 @@ Phase 4  ☐ NOT STARTED Redis · Postgres checkpoints · metrics · diagrams
 | ~~4~~ | ~~Playwright e2e, 6 journeys, CI job (§2.4)~~ | ✅ **done** | — |
 | ~~5~~ | ~~Email agent — IMAP → classify → draft → approve → SMTP (§3.1)~~ | ✅ **done** | — |
 | ~~6~~ | ~~MCP client + `MCPToolAdapter` + MCP server (§3.2)~~ | ✅ **done** | — |
-| 7 | RAG depth: OCR, hybrid search, rerank, compression (§3.3) | 3–4 d | — |
+| ~~7~~ | ~~RAG depth: OCR, hybrid search, rerank, compression (§3.3)~~ | ✅ **done** | — |
 | 8 | Workflow versioning / rollback / clone + WebSocket (§3.4) | 3–4 d | — |
 | 9 | Prompt eval + promotion UI (deferred from 2.2) | 2 d | — |
 | 10 | Phase 4 ops: Redis bus, Postgres checkpointer, `/metrics`, diagrams | 3 d | — |

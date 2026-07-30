@@ -10,8 +10,9 @@ from app.core.config import get_settings
 from app.core.pagination import PaginationParams, build_page_meta, pagination_params
 from app.core.schemas import ApiResponse, MessageResponse
 from app.features.documents.dependencies import get_document_service
-from app.features.documents.schemas import DocumentRead
+from app.features.documents.schemas import DocumentRead, UploadCapabilities
 from app.features.documents.service import DocumentService
+from app.features.documents.validation import allowed_extensions
 from app.features.users.dependencies import get_workspace_user
 from app.features.users.models import User
 
@@ -39,6 +40,19 @@ async def upload_document(
         declared_mime=file.content_type,
     )
     return ApiResponse(data=DocumentRead.model_validate(document))
+
+
+@router.get("/capabilities", response_model=ApiResponse[UploadCapabilities])
+async def upload_capabilities() -> ApiResponse[UploadCapabilities]:
+    """Report the upload rules this instance enforces."""
+    settings = get_settings()
+    return ApiResponse(
+        data=UploadCapabilities(
+            allowed_extensions=allowed_extensions(ocr_enabled=settings.ocr_enabled),
+            max_upload_size_mb=settings.max_upload_size_mb,
+            ocr_enabled=settings.ocr_enabled,
+        )
+    )
 
 
 @router.get("", response_model=ApiResponse[list[DocumentRead]])

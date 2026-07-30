@@ -47,6 +47,10 @@ designed but not yet built — see the guides.) Full design in
 - **Memory** — all six levels behind one `MemoryManager`, including durable
   long-term facts the general agent recalls and grounds on, indexed in their
   own vector namespace so they never leak into document search.
+- **Retrieval depth** — hybrid search (vector + BM25, fused with Reciprocal
+  Rank Fusion) so exact tokens like part numbers are findable, an optional
+  cross-encoder reranking stage, context compression to a token budget, and
+  optional OCR for scanned PDFs and images.
 
 ---
 
@@ -174,8 +178,7 @@ against actually-executed gate runs. As-built module detail:
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 Not yet built (designed, not shipped): calendar agent, workflow
-versioning/rollback, OCR / hybrid search / reranking, visual workflow builder,
-WebSocket live status.
+versioning/rollback, visual workflow builder, WebSocket live status.
 
 > Chat/agent features use the Ollama model set by `LLM_MODEL` (default
 > `llama3`; `llama3.2` is a lighter alternative):

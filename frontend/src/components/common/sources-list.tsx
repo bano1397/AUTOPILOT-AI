@@ -41,7 +41,9 @@ export function SourcesList({ sources }: { sources: RagMatch[] }) {
                     [{index + 1}] {source.filename}
                   </CardTitle>
                   <Badge variant="outline">
-                    distance {source.distance.toFixed(3)}
+                    {source.distance === null
+                      ? "keyword hit"
+                      : `distance ${source.distance.toFixed(3)}`}
                   </Badge>
                 </div>
                 <CardDescription>

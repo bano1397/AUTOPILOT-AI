@@ -13,8 +13,13 @@ from __future__ import annotations
 import asyncio
 from io import BytesIO
 
+from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.domain.interfaces.extraction import TextExtractionError, TextExtractor
+from app.infrastructure.extraction.ocr import OcrTextExtractor
 from app.platform.registry import register_provider
+
+logger = get_logger("app.infrastructure.extraction")
 
 _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -33,8 +38,12 @@ class PlainTextExtractor:
 
 @register_provider(kind="extractor", name="pdf")
 class PdfTextExtractor:
-    """PDF via pypdf. Scanned/image-only PDFs yield no text and fail here;
-    OCR support is a future provider behind the same interface."""
+    """PDF via pypdf, falling back to OCR when the pages carry no text layer.
+
+    The fallback order matters: pypdf is exact and near-instant where a text
+    layer exists, while OCR is lossy and ~1s/page. Trying the cheap, accurate
+    path first means enabling OCR costs nothing for ordinary PDFs.
+    """
 
     async def extract(self, content: bytes) -> str:
         def _parse() -> str:
@@ -49,11 +58,18 @@ class PdfTextExtractor:
             raise
         except Exception as exc:
             raise TextExtractionError(f"Failed to parse PDF: {exc}") from exc
-        if not text.strip():
+
+        if text.strip():
+            return text
+
+        # No text layer: a scan, or a PDF of images.
+        if not get_settings().ocr_enabled:
             raise TextExtractionError(
-                "PDF contains no extractable text (scanned documents need OCR)"
+                "PDF contains no extractable text (scanned documents need OCR; "
+                "set OCR_ENABLED=true)"
             )
-        return text
+        logger.info("extraction.pdf_ocr_fallback")
+        return await OcrTextExtractor().extract(content)
 
 
 @register_provider(kind="extractor", name="docx")
@@ -122,6 +138,11 @@ _EXTRACTORS: dict[str, TextExtractor] = {
     "application/pdf": PdfTextExtractor(),
     _DOCX_MIME: DocxTextExtractor(),
     _XLSX_MIME: XlsxTextExtractor(),
+    # Images have no text layer at all, so OCR is the only path. Uploads are
+    # rejected at validation when OCR is disabled, so reaching here means it
+    # was enabled.
+    "image/png": OcrTextExtractor(),
+    "image/jpeg": OcrTextExtractor(),
 }
 
 

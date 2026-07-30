@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { deleteDocument, listDocuments, uploadDocument } from "./api";
+import {
+  deleteDocument,
+  getUploadCapabilities,
+  listDocuments,
+  uploadDocument,
+} from "./api";
 
 const DOCUMENTS_KEY = ["documents"];
 
@@ -35,5 +40,20 @@ export function useDeleteDocument() {
   return useMutation({
     mutationFn: (id: string) => deleteDocument(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOCUMENTS_KEY }),
+  });
+}
+
+/**
+ * Upload rules, fetched from the server rather than hardcoded.
+ *
+ * The accepted extensions depend on configuration -- image types appear only
+ * when OCR is enabled -- so a copy in the client drifts the moment the server
+ * changes. Static constants remain the fallback while this is in flight.
+ */
+export function useUploadCapabilities() {
+  return useQuery({
+    queryKey: ["documents", "capabilities"],
+    queryFn: getUploadCapabilities,
+    staleTime: 5 * 60 * 1000,
   });
 }

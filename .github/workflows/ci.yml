@@ -49,7 +49,7 @@ jobs:
         run: npm run build
 
   e2e:
-    name: E2E (six core journeys)
+    name: E2E (seven core journeys)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -49,6 +49,7 @@ class DocumentService:
             content,
             declared_mime,
             max_bytes=settings.max_upload_size_mb * 1024 * 1024,
+            ocr_enabled=settings.ocr_enabled,
         )
 
         storage_path = await self._storage.save(content, suffix=validated.suffix)

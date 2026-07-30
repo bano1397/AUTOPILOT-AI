@@ -1,7 +1,7 @@
 import { apiFetch, apiFetchWithMeta } from "@/lib/api/client";
 import type { PageMeta } from "@/lib/api/types";
 
-import type { DocumentItem } from "./types";
+import type { DocumentItem, UploadCapabilities } from "./types";
 
 export function uploadDocument(file: File): Promise<DocumentItem> {
   const form = new FormData();
@@ -23,4 +23,8 @@ export function listDocuments(
 
 export function deleteDocument(id: string): Promise<unknown> {
   return apiFetch(`/api/v1/documents/${id}`, { method: "DELETE" });
+}
+
+export function getUploadCapabilities(): Promise<UploadCapabilities> {
+  return apiFetch<UploadCapabilities>("/api/v1/documents/capabilities");
 }

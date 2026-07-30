@@ -19,6 +19,8 @@ from app.core.exceptions import (
 
 _PDF_MAGIC = b"%PDF-"
 _ZIP_MAGIC = b"PK\x03\x04"  # DOCX/XLSX are OOXML zip containers
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+_JPEG_MAGIC = b"\xff\xd8\xff"
 
 
 def _is_utf8_text(content: bytes) -> bool:
@@ -35,10 +37,18 @@ class _FileType:
 
     canonical_mime: str
     allowed_declared_mimes: frozenset[str]
+    # Images carry no text layer, so they are only ingestible when OCR is on.
+    # Gated at upload rather than at extraction: accepting a file the pipeline
+    # is certain to fail on is a worse experience than refusing it up front.
+    requires_ocr: bool = False
 
     def matches_content(self, content: bytes) -> bool:
         if self.canonical_mime == "application/pdf":
             return content.startswith(_PDF_MAGIC)
+        if self.canonical_mime == "image/png":
+            return content.startswith(_PNG_MAGIC)
+        if self.canonical_mime == "image/jpeg":
+            return content.startswith(_JPEG_MAGIC)
         if self.canonical_mime.startswith("application/vnd."):
             return content.startswith(_ZIP_MAGIC)
         return _is_utf8_text(content)
@@ -59,7 +69,25 @@ ALLOWED_TYPES: dict[str, _FileType] = {
     ".csv": _FileType(
         "text/csv", frozenset({"text/csv", "application/csv", "text/plain", _OCTET})
     ),
+    ".png": _FileType(
+        "image/png", frozenset({"image/png", _OCTET}), requires_ocr=True
+    ),
+    ".jpg": _FileType(
+        "image/jpeg", frozenset({"image/jpeg", _OCTET}), requires_ocr=True
+    ),
+    ".jpeg": _FileType(
+        "image/jpeg", frozenset({"image/jpeg", _OCTET}), requires_ocr=True
+    ),
 }
+
+
+def allowed_extensions(*, ocr_enabled: bool) -> list[str]:
+    """Extensions accepted under the current configuration."""
+    return sorted(
+        suffix
+        for suffix, file_type in ALLOWED_TYPES.items()
+        if ocr_enabled or not file_type.requires_ocr
+    )
 
 
 @dataclass(frozen=True)
@@ -77,6 +105,7 @@ def validate_upload(
     declared_mime: str | None,
     *,
     max_bytes: int,
+    ocr_enabled: bool = False,
 ) -> ValidatedUpload:
     """Validate an upload's name, declared type, content, and size.
 
@@ -96,10 +125,21 @@ def validate_upload(
     suffix = PurePosixPath(basename).suffix.lower()
     file_type = ALLOWED_TYPES.get(suffix)
     if file_type is None:
-        allowed = ", ".join(sorted(ALLOWED_TYPES))
+        allowed = ", ".join(allowed_extensions(ocr_enabled=ocr_enabled))
         raise UnsupportedMediaTypeError(
             f"File type {suffix or '(none)'!r} is not supported",
             details={"allowed_extensions": allowed},
+        )
+
+    if file_type.requires_ocr and not ocr_enabled:
+        raise UnsupportedMediaTypeError(
+            f"File type {suffix!r} needs OCR, which is disabled on this "
+            f"instance (set OCR_ENABLED=true)",
+            details={
+                "allowed_extensions": ", ".join(
+                    allowed_extensions(ocr_enabled=False)
+                )
+            },
         )
 
     if declared_mime and declared_mime.lower() not in file_type.allowed_declared_mimes:

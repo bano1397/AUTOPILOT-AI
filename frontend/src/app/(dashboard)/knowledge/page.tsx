@@ -26,10 +26,18 @@ const EXAMPLES = [
   "pricing tiers",
 ];
 
-/** Heuristic relevance from a vector distance (smaller = closer). */
-function relevance(distance: number): number {
+/** Heuristic relevance from a vector distance (smaller = closer). Null for
+ *  keyword-only hits, which never had a distance. */
+function relevance(distance: number | null): number | null {
+  if (distance === null) return null;
   return Math.max(0, Math.min(1, 1 - distance));
 }
+
+const RETRIEVAL_LABEL: Record<string, string> = {
+  vector: "semantic",
+  keyword: "keyword",
+  hybrid: "both",
+};
 
 export default function KnowledgePage() {
   const [query, setQuery] = useState("");
@@ -192,7 +200,8 @@ function StatTile({
 
 function MatchCard({ match, index }: { match: RagMatch; index: number }) {
   const { icon: Icon, tint } = fileMeta(match.filename);
-  const score = Math.round(relevance(match.distance) * 100);
+  const similarity = relevance(match.distance);
+  const score = similarity === null ? null : Math.round(similarity * 100);
 
   return (
     <motion.div
@@ -219,18 +228,29 @@ function MatchCard({ match, index }: { match: RagMatch; index: number }) {
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <Badge
-            variant="outline"
-            title={`vector distance ${match.distance.toFixed(4)}`}
-          >
-            {score}% match
-          </Badge>
-          <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500"
-              style={{ width: `${score}%` }}
-            />
+          <div className="flex items-center gap-1.5">
+            <Badge variant="secondary" title="how this chunk was retrieved">
+              {RETRIEVAL_LABEL[match.retrieval] ?? match.retrieval}
+            </Badge>
+            <Badge
+              variant="outline"
+              title={
+                match.distance === null
+                  ? "found by keyword search; no vector distance"
+                  : `vector distance ${match.distance.toFixed(4)}`
+              }
+            >
+              {score === null ? "keyword hit" : `${score}% match`}
+            </Badge>
           </div>
+          {score !== null && (
+            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500"
+                style={{ width: `${score}%` }}
+              />
+            </div>
+          )}
         </div>
       </div>
       <p className="mt-3 border-t pt-3 text-sm leading-relaxed text-muted-foreground">

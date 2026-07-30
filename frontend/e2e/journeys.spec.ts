@@ -136,4 +136,34 @@ test.describe("AutoPilot AI core journeys", () => {
       timeout: 30_000,
     });
   });
+
+  test("7 · keyword retrieval finds an exact token and says so", async ({
+    page,
+  }) => {
+    // A coined word: no embedding of a paraphrase lands near it, so a result
+    // here is BM25's doing. The badge is the UI reporting which retriever
+    // found it, which is the visible half of hybrid search.
+    const rareToken = "zylonite";
+
+    await page.goto("/documents");
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "spec.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from(`The ${rareToken} assembly ships in April.`),
+    });
+    await expect(page.getByText("Indexed").first()).toBeVisible({
+      timeout: 30_000,
+    });
+
+    await page.goto("/knowledge");
+    await page.getByPlaceholder("Search your knowledge base…").fill(rareToken);
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+
+    await expect(page.getByText(rareToken).first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(
+      page.getByText(/^(keyword|both)$/).first(),
+    ).toBeVisible({ timeout: 30_000 });
+  });
 });

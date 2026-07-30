@@ -12,3 +12,10 @@ export interface DocumentItem {
   } & Record<string, unknown>;
   created_at: string;
 }
+
+/** Upload rules reported by the server (see GET /api/v1/documents/capabilities). */
+export interface UploadCapabilities {
+  allowed_extensions: string[];
+  max_upload_size_mb: number;
+  ocr_enabled: boolean;
+}

@@ -23,3 +23,16 @@ class DocumentRead(BaseModel):
     status: DocumentStatus
     metadata: dict[str, Any] = Field(validation_alias="doc_metadata")
     created_at: datetime
+
+
+class UploadCapabilities(BaseModel):
+    """What this instance will accept for upload.
+
+    Served so the client stops duplicating server rules: the extension list and
+    size cap are configuration, and a hardcoded copy in the UI drifts silently
+    the moment either changes (image types appear only when OCR is enabled).
+    """
+
+    allowed_extensions: list[str]
+    max_upload_size_mb: int
+    ocr_enabled: bool

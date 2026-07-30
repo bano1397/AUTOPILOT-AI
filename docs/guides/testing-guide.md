@@ -9,7 +9,7 @@ Every change must pass, on both sides:
 cd backend
 ruff check .          # lint
 mypy app              # strict type-check
-pytest                # 460+ tests
+pytest                # 450+ tests
 
 # frontend
 cd frontend

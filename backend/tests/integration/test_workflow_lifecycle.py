@@ -201,7 +201,13 @@ class TestVersioning:
             await api.get("/api/v1/workflows/agents-catalogue")
         ).json()["data"]["agents"]
 
-        assert set(catalogue) == {"general", "knowledge", "planner", "research"}
+        assert set(catalogue) == {
+            "calendar",
+            "general",
+            "knowledge",
+            "planner",
+            "research",
+        }
         assert "email" not in catalogue
 
     async def test_a_malformed_spec_is_rejected(

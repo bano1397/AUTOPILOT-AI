@@ -35,8 +35,13 @@ _PLANNER_MARKER = "planning specialist"
 _EMAIL_CLASSIFY_MARKER = "You triage incoming business email"
 _EMAIL_DRAFT_MARKER = "drafting a reply"
 _CITED_MARKERS = ("numbered context excerpts", "numbered web sources")
+_CALENDAR_MARKER = "scheduling assistant"
 
 _ROUTE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "calendar",
+        ("calendar", "meeting", "schedule", "free", "availability", "appointment"),
+    ),
     ("plan", ("plan", "organise", "organize", "break down", "todo", "roadmap")),
     ("research", ("research", "look up", "latest", "news", "competitor", "market")),
     (
@@ -128,6 +133,8 @@ class StubLLMProvider:
                 "Thanks for getting in touch — I've noted your message and will "
                 "follow up shortly."
             )
+        if _CALENDAR_MARKER in system:
+            return "Here is what your schedule looks like for that period."
         if any(marker in system for marker in _CITED_MARKERS):
             # The caller only reaches a cited prompt when retrieval found
             # something, so a citation is always warranted here.

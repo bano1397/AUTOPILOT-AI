@@ -6,12 +6,14 @@ import json
 from typing import Any
 from uuid import UUID
 
+from app.agents.calendar.agent import CalendarAgent
 from app.agents.general.agent import GeneralAgent
 from app.agents.knowledge.agent import KnowledgeAgent
 from app.agents.planner.agent import PlannerAgent
 from app.agents.research.agent import ResearchAgent
 from app.agents.supervisor.supervisor import SupervisorAgent
 from app.core.logging import get_logger
+from app.domain.interfaces.calendar import CalendarProvider
 from app.domain.interfaces.llm import LLMProvider
 from app.domain.interfaces.search import SearchProvider
 from app.features.rag.service import RagAskService
@@ -58,6 +60,7 @@ class AgentRunService:
         checkpointer: Any | None = None,
         memory: MemoryManager | None = None,
         lifecycle: WorkflowLifecycleService | None = None,
+        calendar: CalendarProvider | None = None,
     ) -> None:
         self._supervisor = SupervisorAgent(llm, recorder)
         knowledge = KnowledgeAgent(ask_service)
@@ -70,6 +73,12 @@ class AgentRunService:
             research.name: research,
             planner.name: planner,
         }
+        # Only routable when a calendar backend is wired; a version enabling
+        # `calendar` without one would fail to compile, which is exactly what
+        # the write-time spec validation exists to catch.
+        if calendar is not None:
+            scheduler = CalendarAgent(calendar, llm, recorder)
+            self._agents[scheduler.name] = scheduler
         self._checkpointer = checkpointer
         self._executor = executor
         self._lifecycle = lifecycle

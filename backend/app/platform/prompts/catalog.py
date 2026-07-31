@@ -34,10 +34,13 @@ SYSTEM_PROMPT = register_prompt(
     )
 ).body
 
-ROUTING_SYSTEM_PROMPT = register_prompt(
+# v1 retained, inactive: every AiExecution row that recorded
+# (agent.supervisor.routing, 1) still resolves to the text it actually used.
+register_prompt(
     PromptTemplate(
         key="agent.supervisor.routing",
         version=1,
+        active=False,
         description="One-word routing classification across the agent set.",
         body=(
             'You are a routing classifier for an AI assistant platform. '
@@ -64,6 +67,44 @@ ROUTING_SYSTEM_PROMPT = register_prompt(
             "research\n'plan the launch of our newsletter' -> plan\n'break "
             "down the website redesign into tasks' -> plan\nReply with only "
             'the single word, nothing else.'
+        ),
+    )
+)
+
+# v2 adds the calendar specialist. Routing prompts are immutable like any
+# other, so adding an agent means a new version rather than an edit.
+ROUTING_SYSTEM_PROMPT = register_prompt(
+    PromptTemplate(
+        key="agent.supervisor.routing",
+        version=2,
+        description="One-word routing across the agent set, including calendar.",
+        body=(
+            'You are a routing classifier for an AI assistant platform. '
+            "Decide which specialist should handle the user's request and "
+            'reply with EXACTLY one word:\n- knowledge: any factual question '
+            "that could be answered from the user's stored documents — "
+            'company policies, HR rules, benefits, contracts, invoices, '
+            'reports, procedures, or specifics about their organization.\n- '
+            'research: questions about the outside world that need current '
+            'or public information from the web — companies, competitors, '
+            'markets, news, technologies, prices, or anything explicitly '
+            'asking to research or look up.\n- plan: requests to plan, '
+            'organize, break down work, or create tasks or a todo list for a '
+            'goal or project.\n- calendar: anything about the schedule — '
+            'meetings, appointments, availability, free time, what is on '
+            'today or this week, or booking a slot.\n- general: greetings, '
+            'small talk, and requests that are clearly not answerable from '
+            'stored documents, the web, or the calendar (creative writing, '
+            'coding help, chit-chat).\nIf you are unsure between knowledge '
+            "and general, choose knowledge.\nExamples:\n'hi, how are you?' -> "
+            "general\n'write me a haiku about spring' -> general\n'how many "
+            "vacation days do employees get?' -> knowledge\n'what does the "
+            "contract say about payment terms?' -> knowledge\n'research the "
+            "main competitors of OpenAI' -> research\n'plan the launch of our "
+            "newsletter' -> plan\n'what meetings do I have tomorrow?' -> "
+            "calendar\n'when am I free this week?' -> calendar\n'book 30 "
+            "minutes with Sam' -> calendar\nReply with only the single word, "
+            'nothing else.'
         ),
     )
 ).body
@@ -150,6 +191,24 @@ PLANNER_SYSTEM_PROMPT = register_prompt(
     )
 ).body
 
+
+CALENDAR_SYSTEM_PROMPT = register_prompt(
+    PromptTemplate(
+        key="agent.calendar.system",
+        version=1,
+        description="Answers scheduling questions from the user's real calendar.",
+        variables=("schedule",),
+        body=(
+            "You are AutoPilot AI's scheduling assistant. Answer using ONLY "
+            "the calendar data below — it is the user's actual schedule. Never "
+            "invent a meeting, an attendee, or a time that is not listed. If "
+            "the data does not answer the question, say so plainly.\n"
+            "Times are UTC; state them as given. Be brief and concrete: name "
+            "the meeting and the time rather than describing the calendar.\n\n"
+            "{{ schedule }}"
+        ),
+    )
+)
 
 EMAIL_CLASSIFY_SYSTEM_PROMPT = register_prompt(
     PromptTemplate(

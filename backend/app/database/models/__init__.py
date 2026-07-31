@@ -7,6 +7,7 @@ must be imported here as they are added.
 
 from app.database.base import Base
 from app.features.approvals.models import Approval, ApprovalStatus
+from app.features.calendar.models import CalendarEventRow
 from app.features.conversations.models import Conversation, Message
 from app.features.documents.models import Document, DocumentChunk, DocumentStatus
 from app.features.emails.models import Email, EmailIntent, EmailStatus
@@ -29,6 +30,7 @@ __all__ = [
     "Approval",
     "ApprovalStatus",
     "Base",
+    "CalendarEventRow",
     "Conversation",
     "Document",
     "DocumentChunk",

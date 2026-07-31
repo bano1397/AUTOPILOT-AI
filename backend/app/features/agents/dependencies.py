@@ -12,9 +12,11 @@ from app.core.dependencies import (
     get_llm,
     get_search,
 )
+from app.domain.interfaces.calendar import CalendarProvider
 from app.domain.interfaces.llm import LLMProvider
 from app.domain.interfaces.search import SearchProvider
 from app.features.agents.service import AgentRunService
+from app.features.calendar.dependencies import get_calendar_provider
 from app.features.rag.dependencies import get_rag_ask_service
 from app.features.rag.service import RagAskService
 from app.features.tasks.dependencies import get_task_service
@@ -37,6 +39,7 @@ def get_agent_run_service(
     checkpointer: object | None = Depends(get_checkpointer),
     memory: MemoryManager = Depends(get_memory_manager),
     session: AsyncSession = Depends(get_db_session),
+    calendar: CalendarProvider = Depends(get_calendar_provider),
 ) -> AgentRunService:
     return AgentRunService(
         llm,
@@ -48,4 +51,5 @@ def get_agent_run_service(
         checkpointer,
         memory,
         WorkflowLifecycleService(session),
+        calendar,
     )

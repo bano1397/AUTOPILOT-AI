@@ -22,12 +22,17 @@ async def test_listing_returns_every_catalogued_prompt(api: AsyncClient) -> None
     response = await api.get("/api/v1/prompts")
 
     assert response.status_code == 200, response.text
-    prompts = {prompt["key"]: prompt for prompt in response.json()["data"]}
-    assert "agent.supervisor.routing" in prompts
-    routing = prompts["agent.supervisor.routing"]
-    assert routing["version"] == 1
-    assert routing["active"] is True
+    # The listing carries every version, so pick the active one rather than
+    # keying by prompt name: routing is on v2 since the calendar agent landed.
+    rows = response.json()["data"]
+    routing = next(
+        row
+        for row in rows
+        if row["key"] == "agent.supervisor.routing" and row["active"]
+    )
+    assert routing["version"] == 2
     assert "EXACTLY one" in routing["body"]
+    assert "calendar:" in routing["body"]
 
 
 async def test_versions_for_one_key(api: AsyncClient) -> None:

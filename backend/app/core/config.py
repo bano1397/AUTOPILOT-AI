@@ -165,6 +165,13 @@ class Settings(BaseSettings):
     qdrant_url: str | None = None
     qdrant_api_key: str | None = None
 
+    # --- Calendar -----------------------------------------------------------
+    # `local` stores events in this platform's own database, so scheduling
+    # works with no external account. `google` selects the adapter seam, which
+    # has no OAuth flow yet and fails loudly rather than returning an empty
+    # calendar -- see app/infrastructure/calendar/google.py.
+    calendar_provider: str = "local"  # local | google
+
     # --- Email (IMAP in, SMTP out) ----------------------------------------
     # Mailbox reading is enabled when host + username + password are all set;
     # sending reuses the SMTP_* settings below. Both are optional: without them

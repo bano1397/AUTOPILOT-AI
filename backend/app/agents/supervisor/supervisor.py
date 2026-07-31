@@ -18,6 +18,7 @@ ROUTE_KNOWLEDGE = "knowledge"
 ROUTE_GENERAL = "general"
 ROUTE_RESEARCH = "research"
 ROUTE_PLANNER = "planner"
+ROUTE_CALENDAR = "calendar"
 
 
 def parse_route(reply: str) -> str:
@@ -28,6 +29,8 @@ def parse_route(reply: str) -> str:
     general agent risks an ungrounded (hallucinated) answer.
     """
     normalized = reply.strip().lower()
+    if ROUTE_CALENDAR in normalized or "schedul" in normalized:
+        return ROUTE_CALENDAR
     if ROUTE_RESEARCH in normalized:
         return ROUTE_RESEARCH
     if "plan" in normalized:  # the classifier answers "plan"; the agent is "planner"

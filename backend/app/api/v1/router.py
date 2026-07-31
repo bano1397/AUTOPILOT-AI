@@ -12,6 +12,7 @@ from fastapi import APIRouter
 from app.features.agents.router import router as agents_router
 from app.features.analytics.router import router as analytics_router
 from app.features.approvals.router import router as approvals_router
+from app.features.calendar.router import router as calendar_router
 from app.features.conversations.router import router as conversations_router
 from app.features.documents.router import router as documents_router
 from app.features.emails.router import router as emails_router
@@ -50,3 +51,4 @@ api_router.include_router(
     preferences_router, prefix="/preferences", tags=["preferences"]
 )
 api_router.include_router(memory_router, prefix="/memory", tags=["memory"])
+api_router.include_router(calendar_router, prefix="/calendar", tags=["calendar"])

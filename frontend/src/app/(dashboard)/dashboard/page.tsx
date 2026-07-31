@@ -8,27 +8,26 @@ import { AssistantLauncher } from "@/components/dashboard/assistant-launcher";
 import { GreetingHero } from "@/components/dashboard/greeting-hero";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { StatusBanner } from "@/components/dashboard/status-banner";
-import { useAgents } from "@/features/agents/hooks";
-import { useAnalyticsOverview } from "@/features/analytics/hooks";
-import { usePendingApprovals } from "@/features/approvals/hooks";
+import { useDashboard } from "@/features/dashboard/hooks";
 import { formatDuration } from "@/lib/utils";
 
 export default function DashboardPage() {
-  const overview = useAnalyticsOverview(30);
-  const approvals = usePendingApprovals(1);
-  const agents = useAgents();
+  // One call instead of three: see useDashboard.
+  const dashboard = useDashboard(30);
+  const overview = dashboard.data?.analytics;
 
-  const totals = overview.data?.totals;
-  const timeseries = overview.data?.timeseries ?? [];
-  const documentsIndexed = overview.data?.entities.documents_indexed ?? 0;
-  const pending = approvals.data?.meta?.total ?? 0;
+  const totals = overview?.totals;
+  const timeseries = overview?.timeseries ?? [];
+  const documentsIndexed = overview?.entities.documents_indexed ?? 0;
+  const pending = dashboard.data?.pending_approval_count ?? 0;
+  const agentCount = dashboard.data?.agents.length ?? 0;
 
   const execSeries = timeseries.map((point) => point.executions);
   const tokenSeries = timeseries.map((point) => point.total_tokens);
 
-  const health = overview.isError
+  const health = dashboard.isError
     ? "unreachable"
-    : overview.isPending
+    : dashboard.isPending
       ? "connecting"
       : "operational";
 
@@ -38,7 +37,7 @@ export default function DashboardPage() {
 
       <StatusBanner
         health={health}
-        agents={(agents.data?.length ?? 0).toString()}
+        agents={agentCount.toString()}
         runs={(totals?.executions ?? 0).toLocaleString()}
         avgLatency={formatDuration(totals?.avg_duration_ms ?? 0)}
         approvals={pending.toString()}
@@ -87,9 +86,12 @@ export default function DashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <AgentsGrid />
+          <AgentsGrid
+            agents={dashboard.data?.agents ?? []}
+            byFeature={overview?.by_feature ?? []}
+          />
         </div>
-        <ActivityFeed />
+        <ActivityFeed runs={dashboard.data?.recent_runs ?? []} />
       </div>
     </div>
   );

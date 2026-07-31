@@ -14,6 +14,7 @@ from app.features.analytics.router import router as analytics_router
 from app.features.approvals.router import router as approvals_router
 from app.features.calendar.router import router as calendar_router
 from app.features.conversations.router import router as conversations_router
+from app.features.dashboard.router import router as dashboard_router
 from app.features.documents.router import router as documents_router
 from app.features.emails.router import router as emails_router
 from app.features.memory.router import router as memory_router
@@ -52,3 +53,4 @@ api_router.include_router(
 )
 api_router.include_router(memory_router, prefix="/memory", tags=["memory"])
 api_router.include_router(calendar_router, prefix="/calendar", tags=["calendar"])
+api_router.include_router(dashboard_router, prefix="/dashboard", tags=["dashboard"])

@@ -3,8 +3,8 @@
 import { CheckCircle2, CircleAlert, Clock, Loader2 } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import type { WorkflowRun } from "@/features/workflows/types";
 import type { WorkflowRunStatus } from "@/features/workflows/types";
-import { useWorkflowRuns } from "@/features/workflows/hooks";
 
 function timeAgo(iso: string): string {
   const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -26,9 +26,9 @@ function StatusIcon({ status }: { status: WorkflowRunStatus }) {
   return <Loader2 className="size-4 animate-spin text-muted-foreground" />;
 }
 
-export function ActivityFeed() {
-  const runs = useWorkflowRuns(1, 8);
-  const items = runs.data?.data ?? [];
+/** Runs come from the dashboard aggregate; see AgentsGrid for why. */
+export function ActivityFeed({ runs = [] }: { runs?: WorkflowRun[] }) {
+  const items = runs;
 
   return (
     <Card>

@@ -12,8 +12,8 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { useAgents } from "@/features/agents/hooks";
-import { useAnalyticsOverview } from "@/features/analytics/hooks";
+import type { AgentInfo } from "@/features/agents/api";
+import type { FeatureStat } from "@/features/analytics/types";
 
 const ICONS: Record<string, LucideIcon> = {
   knowledge: BookOpen,
@@ -22,15 +22,21 @@ const ICONS: Record<string, LucideIcon> = {
   planner: ListTodo,
 };
 
-export function AgentsGrid() {
-  const agents = useAgents();
-  const overview = useAnalyticsOverview(30);
-
+/** Data comes from the dashboard aggregate rather than its own fetches: this
+ *  renders on the same screen, and duplicating the calls meant the grid could
+ *  show counts from a different moment than the KPIs above it. */
+export function AgentsGrid({
+  agents = [],
+  byFeature = [],
+}: {
+  agents?: AgentInfo[];
+  byFeature?: FeatureStat[];
+}) {
   const runsByFeature = new Map(
-    (overview.data?.by_feature ?? []).map((f) => [f.feature, f.executions]),
+    byFeature.map((f) => [f.feature, f.executions]),
   );
 
-  const items = agents.data ?? [];
+  const items = agents;
 
   return (
     <Card>

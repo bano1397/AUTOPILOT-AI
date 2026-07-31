@@ -1,0 +1,10 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart LR
+    TPL["Templates (Jinja2)<br/>+ declared variables"] --> REG["PromptRegistry"]
+    REG --> VER["Versioning (PROMPT_VERSION)"]
+    VER --> ACT["Active version selection"]
+    REG --> TEST["Prompt Testing (fixtures)"]
+    TEST --> EVAL["Evaluation (scored) → eval_score"]
+    EVAL --> ACT
+    AG[Agents] --> REG
+    OBS["AI Execution log"] --> VER

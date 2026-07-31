@@ -1,0 +1,7 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart TD
+    SUP["🧭 Supervisor"] --> EM["✉️ Email"] & RAG["📚 RAG"] & RES["🔎 Research"] & TSK["✅ Task"] & CAL["📅 Calendar"] & ANA["📊 Analytics"]
+    EM & RAG & RES & TSK & CAL & ANA --> MEM["🧠 Memory"]
+    MEM --> NOT["🔔 Notification"]
+    EM & RAG & RES -.tools.-> TR["ToolRegistry (native+MCP)"]
+    EM & RAG & RES -.llm.-> LLM["LLMProvider"]

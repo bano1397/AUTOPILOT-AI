@@ -1,0 +1,6 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart TB
+    L[RootLayout+Providers: Theme·Query·Auth·WS] --> DASH["(dashboard) segment"]
+    DASH --> FEAT[features/*] --> COMMON[common/] --> PRIM[ui/ shadcn]
+    FEAT --> RQ[TanStack Query] --> APIC[lib/api]
+    FEAT --> Z[Zustand]; FEAT --> WSC[lib/ws]

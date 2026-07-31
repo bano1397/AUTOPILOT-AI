@@ -1,0 +1,10 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart LR
+    P1[Services] -->|publish| BUS(("Event Bus<br/>async in-proc<br/>→ Redis pub/sub*"))
+    P2[Agents] -->|publish| BUS
+    P3[Workflows] -->|publish| BUS
+    BUS -->|subscribe| S1[Notification handler]
+    BUS -->|subscribe| S2[Analytics updater]
+    BUS -->|subscribe| S3[WebSocket broadcaster]
+    BUS -->|subscribe| S4[Audit logger]
+    BUS -->|subscribe| S5[Memory writer]

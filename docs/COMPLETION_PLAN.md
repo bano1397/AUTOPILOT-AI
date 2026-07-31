@@ -124,8 +124,8 @@ Designed in `ARCHITECTURE.md`, absent from the code:
 - Render free tier has an ephemeral disk: uploaded file bytes and
   `workflow_checkpoints.db` are lost on restart (Postgres + Qdrant survive).
 - Settings page is read-only display + theme; nothing persists server-side.
-- `.env` holds real values in the working tree (correctly gitignored — but
-  history should be audited for leaked keys before the repo goes public).
+- ~~`.env` holds real values in the working tree — history should be audited.~~
+  **Closed** — history scanned, no secrets ever committed (§8).
 
 ---
 
@@ -640,9 +640,17 @@ Local-default calendar adapter with a Google adapter seam; single
 - Redis event bus + Redis rate limiter → multi-replica correctness (F5).
 - Postgres-backed LangGraph checkpointer → checkpoints survive restarts.
 - `/metrics` endpoint (Prometheus) alongside the existing JSON logs.
-- Diagram export pipeline (`scripts/export-diagrams`, Appendix B) — fills the
-  missing `docs/diagrams/`.
-- Secret hygiene: audit git history for keys before the repo goes public.
+- ~~Diagram export pipeline (`scripts/export-diagrams`, Appendix B)~~ ✅
+  **done** — `scripts/export-diagrams.py` derives 28 `.mmd` files from the
+  Mermaid blocks in the markdown rather than keeping a hand-maintained second
+  copy, which is how the two drifted in the first place. `--check` runs in CI
+  so they cannot drift again. SVG export is opt-in (`--render`, needs `mmdc`):
+  GitHub renders mermaid natively, so raster output matters for slides, not
+  for reading.
+- ~~Secret hygiene: audit git history for keys before the repo goes public.~~
+  ✅ **done, clean** — every commit scanned for `gsk_`/`jina_`/`sk-`/`AKIA`/
+  `ghp_` patterns and for a committed `.env`. No hits. `.env` has been
+  gitignored since the first commit.
 
 ---
 

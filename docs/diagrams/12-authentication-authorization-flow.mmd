@@ -1,0 +1,17 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+sequenceDiagram
+    participant U as UI
+    participant API as FastAPI
+    participant DB as DB
+    U->>API: POST /auth/login {email,pwd}
+    API->>DB: fetch user
+    API->>API: verify argon2
+    API->>DB: store hashed refresh token
+    API-->>U: {access 15m, refresh 7d (httpOnly cookie)}
+    U->>API: GET /documents (Bearer)
+    API->>API: decode JWT → claims(sub,role)
+    API->>API: require_role / ownership check
+    API-->>U: 200
+    U->>API: POST /auth/refresh (expired)
+    API->>DB: validate + rotate refresh
+    API-->>U: new {access,refresh}

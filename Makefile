@@ -1,8 +1,8 @@
-.PHONY: check check-backend check-frontend check-e2e install-hooks
+.PHONY: check check-backend check-frontend check-e2e check-docs diagrams install-hooks
 
 # The exact gates CI runs (.github/workflows/ci.yml). Keep the two in sync:
 # if a gate is added here, add it there too.
-check: check-backend check-frontend check-e2e
+check: check-backend check-frontend check-e2e check-docs
 
 check-backend:
 	cd backend && ruff check . && mypy app && pytest
@@ -14,6 +14,13 @@ check-frontend:
 # using the stub providers, so this needs no model server and no network.
 check-e2e:
 	cd frontend && npm run test:e2e
+
+# Diagram sources are derived from the markdown; this catches drift.
+check-docs:
+	python3 scripts/export-diagrams.py --check
+
+diagrams:
+	python3 scripts/export-diagrams.py
 
 # Installs a pre-push hook that runs `make check`. Phase 0 of the completion
 # plan existed because a refactor landed on main without the suite being run.

@@ -1,0 +1,8 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+sequenceDiagram
+    participant SC as APScheduler
+    participant WF as Workflow engine
+    participant N as Notification
+    SC->>WF: trigger job (cron) e.g. inbox digest
+    WF->>WF: run graph
+    WF->>N: notify daily summary; emit WorkflowCompleted

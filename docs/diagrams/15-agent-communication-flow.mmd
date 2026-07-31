@@ -1,0 +1,16 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+sequenceDiagram
+    participant S as Supervisor
+    participant R as Research
+    participant K as RAG
+    participant M as Memory
+    participant B as EventBus
+    S->>R: state{request}
+    R-->>S: state{findings}
+    R->>B: ResearchCompleted
+    S->>K: state{request,findings}
+    K-->>S: state{draft,citations}
+    K->>B: EmailDrafted
+    S->>M: state{draft}
+    M-->>S: state{+memories}
+    B-->>WS: broadcast

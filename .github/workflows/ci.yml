@@ -48,6 +48,19 @@ jobs:
       - name: Build
         run: npm run build
 
+  docs:
+    name: Docs (diagram exports current)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The .mmd files under docs/diagrams/ are generated from the markdown;
+      # this fails if someone edits a diagram without re-exporting.
+      - name: Check diagram exports
+        run: python scripts/export-diagrams.py --check
+
   e2e:
     name: E2E (nine core journeys)
     runs-on: ubuntu-latest

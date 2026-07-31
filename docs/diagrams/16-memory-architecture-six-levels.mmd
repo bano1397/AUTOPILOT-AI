@@ -1,0 +1,11 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart LR
+    MM["MemoryManager (facade)"]
+    MM --> WM["1 Working<br/>(in-run scratch, ephemeral)"]
+    MM --> CM["2 Conversation<br/>(thread history · MESSAGE)"]
+    MM --> LT["3 Long-Term<br/>(vector · durable facts)"]
+    MM --> KM["4 Knowledge<br/>(document chunks · RAG)"]
+    MM --> PM["5 User Preference<br/>(relational settings)"]
+    MM --> WFM["6 Workflow<br/>(run state/checkpoints)"]
+    MM --> RET{Retrieval}
+    RET --> SEM[semantic] & KW[keyword] & HYB["hybrid (RRF)"]

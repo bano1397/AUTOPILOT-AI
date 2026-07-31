@@ -1,0 +1,9 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+sequenceDiagram
+    participant U as UI
+    participant A as Auth API
+    participant DB
+    U->>A: POST /auth/login
+    A->>DB: fetch user; verify argon2
+    A->>DB: store hashed refresh
+    A-->>U: access+refresh

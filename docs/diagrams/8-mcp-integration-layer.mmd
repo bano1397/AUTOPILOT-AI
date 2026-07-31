@@ -1,0 +1,15 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart TB
+    subgraph app_mcp["app/mcp/"]
+        CL["clients/ — connect to external MCP servers<br/>(stdio / HTTP-SSE transports)"]
+        SR["servers/ — expose AutoPilot tools AS an MCP server"]
+        RG["registry/ — discover MCP servers from config, list remote tools"]
+        TL["tools/ — MCPToolAdapter: wraps a remote MCP tool as a Tool"]
+    end
+    CFG[".env / mcp_servers.yaml"] --> RG
+    RG --> CL
+    CL -->|list_tools / call_tool| EXT["External MCP Servers<br/>(filesystem, github, db, custom)"]
+    TL -->|adapts| CL
+    TL -->|registers into| TOOLREG["ToolRegistry (§19)"]
+    AG["Agents"] --> TOOLREG
+    SR --> EXTC["External MCP clients<br/>(e.g. Claude Desktop) consume AutoPilot"]

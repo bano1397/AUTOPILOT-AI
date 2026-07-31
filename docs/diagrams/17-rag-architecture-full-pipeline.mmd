@@ -1,0 +1,19 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart TB
+    subgraph Ingest["Ingestion (async, event-driven)"]
+        UP[Upload] --> OCRs["OCR (scanned → text)"]
+        OCRs --> CLN[Cleaning/normalize]
+        CLN --> MDX[Metadata extraction]
+        MDX --> CH["Chunking (token-aware, overlap)"]
+        CH --> EMB[Embedding]
+        EMB --> IDX["Index → VectorStore + metadata"]
+        IDX --> EV[[emit DocumentIndexed]]
+    end
+    subgraph Query["Query time"]
+        Q[Question] --> HS["Hybrid search (vector+keyword)"]
+        HS --> RR[Reranking]
+        RR --> CMP["Context compression (token budget)"]
+        CMP --> GEN["LLM generate (+cite instructions)"]
+        GEN --> CITE["Citations (chunk→doc,page)"]
+        CITE --> MEMW["Write to Memory (levels 2/3)"]
+    end

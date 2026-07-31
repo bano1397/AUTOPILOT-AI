@@ -1,0 +1,18 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart TB
+    subgraph Discovery["Startup discovery"]
+        SCAN["Package scanner<br/>(importlib + pkgutil)"]
+        EP["Python entry-points<br/>(3rd-party plugins)"]
+    end
+    subgraph Registries["Typed registries (singletons)"]
+        RA[AgentRegistry]
+        RT[ToolRegistry]
+        RP[ProviderRegistry]
+        RW[WorkflowRegistry]
+        RI[IntegrationRegistry]
+    end
+    SCAN --> RA & RT & RP & RW & RI
+    EP --> RA & RT & RP & RW & RI
+    FAC["Factory: create(name, config) → instance"]
+    RA & RT & RP & RW & RI --> FAC
+    CONT["Container / Supervisor / Marketplace"] --> FAC

@@ -1,0 +1,60 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart TB
+    subgraph Client["Client Layer"]
+        UI["Next.js 14 · React · TS · Tailwind · shadcn/ui"]
+    end
+    subgraph Edge["API Layer"]
+        API["FastAPI /api/v1 · JWT · validation · rate limit"]
+        WS["WebSocket Gateway"]
+    end
+    subgraph Platform["Platform / Cross-cutting"]
+        REG["Plugin Registries<br/>agents·tools·providers·workflows·integrations"]
+        BUS["Event Bus (async pub/sub)"]
+        OBS["AI Observability + Cost Tracker"]
+        PROMPT["Prompt Registry"]
+    end
+    subgraph App["Application / Domain"]
+        SVC["Services (use-cases)"]
+        ORCH["LangGraph Supervisor + Checkpointer"]
+        AGENTS["Agents (9) — LangGraph nodes"]
+        TOOLS["Tools (native + MCP) via Marketplace"]
+    end
+    subgraph Providers["Provider Abstraction Layer"]
+        LLM["LLMProvider"]
+        EMB["EmbeddingProvider"]
+        VEC["VectorStoreProvider"]
+        DBP["DatabaseProvider"]
+        STO["StorageProvider"]
+        OCR["OCRProvider"]
+        SEA["SearchProvider"]
+        EMAILP["EmailProvider"]
+        CALP["CalendarProvider"]
+        NOTP["NotificationProvider"]
+    end
+    subgraph MCP["MCP Layer"]
+        MCPC["MCP Clients"]
+        MCPS["MCP Servers"]
+    end
+    subgraph Data["Persistence"]
+        SQL[("SQLite/Postgres")]
+        CHROMA[("ChromaDB")]
+        FILES[("File Storage")]
+    end
+
+    UI -->|REST| API
+    UI <-->|realtime| WS
+    API --> SVC --> ORCH --> AGENTS
+    AGENTS --> TOOLS
+    TOOLS --> MCPC --> MCPS
+    AGENTS --> PROMPT
+    AGENTS --> OBS
+    AGENTS -.emit/subscribe.-> BUS
+    SVC -.emit/subscribe.-> BUS
+    WS <-.-> BUS
+    SVC --> REG
+    AGENTS --> Providers
+    SVC --> Providers
+    DBP --> SQL
+    VEC --> CHROMA
+    STO --> FILES
+    LLM & EMB -.-> OLLAMA["Ollama (Llama3/Mistral/Gemma)"]

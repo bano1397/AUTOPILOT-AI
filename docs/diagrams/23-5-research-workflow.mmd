@@ -1,0 +1,14 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+sequenceDiagram
+    participant U as UI
+    participant S as Supervisor
+    participant R as ResearchAgent
+    participant SE as SearchProvider
+    U->>S: POST /research/report
+    S->>R: run
+    loop per source
+        R->>SE: search + fetch (Playwright)
+        SE-->>R: content
+    end
+    R->>R: summarize + compare
+    R-->>U: report; emit ResearchCompleted

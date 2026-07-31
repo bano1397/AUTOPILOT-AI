@@ -1,0 +1,11 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+sequenceDiagram
+    participant W as Workflow
+    participant DB
+    participant N as NotificationProvider
+    participant U as User
+    W->>DB: APPROVAL(pending); emit ApprovalRequired
+    W->>N: notify (Telegram/email)
+    U->>W: POST /approvals/{id}/decision {approve|reject|edit|retry}
+    W->>DB: record decision + decider
+    W->>W: resume(checkpoint) or terminate; emit ApprovalReceived

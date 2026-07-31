@@ -1,0 +1,9 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart TB
+    subgraph Host["Docker host (dev & small prod)"]
+        NGINX[nginx TLS/routing] --> FE[frontend:3000]
+        NGINX --> BE[backend:8000]
+        BE --> OLL[ollama:11434]
+        BE --> CH[chromadb]
+        BE --> VOL[(volumes: documents · vector_store · sqlite · logs · ollama_models)]
+    end

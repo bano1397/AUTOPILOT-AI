@@ -1,0 +1,8 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart LR
+    E[Error] --> T{Type}
+    T -->|DomainError| H1[4xx envelope]
+    T -->|ValidationError| H2[422 + fields]
+    T -->|AuthError| H3[401/403]
+    T -->|ProviderError| H4[retry/backoff → fallback → 503]
+    T -->|Unexpected| H5[500 generic + log stack + cid]

@@ -1,0 +1,48 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+erDiagram
+    USER ||--o{ REFRESH_TOKEN : has
+    USER ||--o{ DOCUMENT : owns
+    USER ||--o{ EMAIL : owns
+    USER ||--o{ TASK : owns
+    USER ||--o{ WORKFLOW_RUN : initiates
+    USER ||--o{ NOTIFICATION : receives
+    USER ||--|| USER_PREFERENCE : has
+    USER ||--o{ CONVERSATION : owns
+    USER ||--o{ MEMORY_ENTRY : owns
+
+    DOCUMENT ||--o{ DOCUMENT_CHUNK : split_into
+    CONVERSATION ||--o{ MESSAGE : contains
+    WORKFLOW_DEF ||--o{ WORKFLOW_VERSION : versioned
+    WORKFLOW_VERSION ||--o{ WORKFLOW_RUN : executed_as
+    WORKFLOW_RUN ||--o{ WORKFLOW_STEP : has
+    WORKFLOW_RUN ||--o{ APPROVAL : gates
+    WORKFLOW_RUN ||--o{ AI_EXECUTION : traces
+    AI_EXECUTION ||--o{ TOOL_CALL : includes
+    AI_EXECUTION }o--|| PROMPT_VERSION : used
+    PROMPT_DEF ||--o{ PROMPT_VERSION : versioned
+    EMAIL ||--o{ APPROVAL : requires
+    TASK ||--o{ TASK_ITEM : checklist
+    TASK ||--o{ TASK : depends_on
+
+    USER { uuid id PK; string email UK; string password_hash; enum role; bool is_active; datetime created_at }
+    REFRESH_TOKEN { uuid id PK; uuid user_id FK; string token_hash; datetime expires_at; bool revoked }
+    USER_PREFERENCE { uuid id PK; uuid user_id FK; json settings; string default_llm_model }
+    DOCUMENT { uuid id PK; uuid user_id FK; string filename; string mime_type; int size_bytes; enum status; string storage_path; json metadata; datetime created_at }
+    DOCUMENT_CHUNK { uuid id PK; uuid document_id FK; int chunk_index; string vector_id; text content_preview; json metadata }
+    CONVERSATION { uuid id PK; uuid user_id FK; string title; string context_type; datetime created_at }
+    MESSAGE { uuid id PK; uuid conversation_id FK; enum role; text content; json citations; int tokens; datetime created_at }
+    MEMORY_ENTRY { uuid id PK; uuid user_id FK; enum level; string vector_id; text content; json metadata; datetime created_at }
+    EMAIL { uuid id PK; uuid user_id FK; string sender; string subject; text body; enum intent; json entities; enum status; datetime received_at }
+    TASK { uuid id PK; uuid user_id FK; uuid depends_on_id FK; string title; enum priority; enum status; datetime due_date }
+    TASK_ITEM { uuid id PK; uuid task_id FK; string label; bool done }
+    WORKFLOW_DEF { uuid id PK; string name UK; string description; datetime created_at }
+    WORKFLOW_VERSION { uuid id PK; uuid workflow_id FK; int version; json graph_spec; bool is_active; datetime created_at }
+    WORKFLOW_RUN { uuid id PK; uuid user_id FK; uuid workflow_version_id FK; enum status; string checkpoint_id; datetime started_at; datetime ended_at }
+    WORKFLOW_STEP { uuid id PK; uuid run_id FK; string node_name; enum status; int duration_ms; datetime created_at }
+    AI_EXECUTION { uuid id PK; uuid run_id FK; string agent_name; string provider; string model; int prompt_tokens; int completion_tokens; float cost_usd; int duration_ms; json retrieved_docs; text decision; text error; datetime created_at }
+    TOOL_CALL { uuid id PK; uuid execution_id FK; string tool_name; string origin; json input; json output; int duration_ms; text error }
+    PROMPT_DEF { uuid id PK; string key UK; string description; string category }
+    PROMPT_VERSION { uuid id PK; uuid prompt_id FK; int version; text template; json variables; bool is_active; float eval_score; datetime created_at }
+    APPROVAL { uuid id PK; uuid run_id FK; uuid email_id FK; string action_type; json payload; enum decision; text edited_payload; uuid decided_by FK; datetime decided_at }
+    NOTIFICATION { uuid id PK; uuid user_id FK; string channel; string type; text message; bool read; datetime created_at }
+    SCHEDULED_JOB { uuid id PK; string name; string cron; string workflow_name; bool enabled; datetime next_run_at }

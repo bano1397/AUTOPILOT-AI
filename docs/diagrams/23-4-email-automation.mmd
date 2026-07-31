@@ -1,0 +1,13 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+sequenceDiagram
+    participant U as UI
+    participant W as Email workflow
+    participant E as EmailAgent
+    participant AP as ApprovalGate
+    participant M as EmailProvider(SMTP)
+    U->>W: POST /emails/{id}/draft
+    W->>E: analyze→retrieve→draft
+    E-->>W: EmailDraft; emit EmailDrafted
+    W->>AP: interrupt(needs_approval); emit ApprovalRequired
+    U->>W: approve
+    W->>M: send; EMAIL.status=sent; emit WorkflowCompleted

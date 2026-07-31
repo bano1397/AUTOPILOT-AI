@@ -1,0 +1,8 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart LR
+    DEF["WORKFLOW_DEF"] --> V1["v1"] --> V2["v2 (active)"] --> V3["v3 draft"]
+    V2 --> RUN["WORKFLOW_RUN"]
+    RUN --> RES["Resume (checkpoint)"]
+    RUN --> RB["Rollback → run prior version"]
+    DEF --> CLONE["Clone → new WORKFLOW_DEF"]
+    RUN --> HIST["Execution History (runs + steps + AI executions)"]

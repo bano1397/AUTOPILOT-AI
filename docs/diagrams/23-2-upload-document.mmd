@@ -1,0 +1,15 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+sequenceDiagram
+    participant U as UI
+    participant D as documents.router
+    participant S as StorageProvider
+    participant BG as BackgroundTask
+    participant P as RAG pipeline
+    participant V as VectorStore
+    U->>D: POST /documents (file)
+    D->>S: save file; DOCUMENT(uploaded)
+    D->>BG: schedule ingest
+    D-->>U: 202 processing
+    BG->>P: OCR→clean→meta→chunk→embed
+    P->>V: upsert vectors
+    P->>D: status=indexed; emit DocumentIndexed → WS

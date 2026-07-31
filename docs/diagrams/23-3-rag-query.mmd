@@ -1,0 +1,13 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+sequenceDiagram
+    participant U as UI
+    participant R as rag.router/agent
+    participant V as VectorStore
+    participant L as LLMProvider
+    U->>R: POST /rag/query
+    R->>V: hybrid search (user-scoped)
+    V-->>R: chunks
+    R->>R: rerank + compress
+    R->>L: prompt(context+q, cite)
+    L-->>R: answer
+    R-->>U: answer + citations

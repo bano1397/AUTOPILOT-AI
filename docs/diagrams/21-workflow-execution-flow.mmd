@@ -1,0 +1,17 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart TD
+    A["POST /workflows/runs (pin version)"] --> B["RUN=pending; emit WorkflowStarted"]
+    B --> C["Compile graph + checkpointer(run_id)"]
+    C --> D["Execute nodes; stream via WS/bus"]
+    D --> F{Approval interrupt?}
+    F -- yes --> G["awaiting_approval; APPROVAL(pending); emit ApprovalRequired; notify"]
+    G --> H["/approvals/{id}/decision"]
+    H --> I["Resume from checkpoint"]
+    F -- no --> I
+    I --> J{Error?}
+    J -- yes --> K["log AI_EXECUTION.error; retry backoff"]
+    K --> L{Retries left?}
+    L -- yes --> D
+    L -- no --> M["status=failed; emit WorkflowFailed; notify"]
+    J -- no --> N["Execute action; SaveMemory"]
+    N --> O["completed; emit WorkflowCompleted+CostRecorded; analytics++"]

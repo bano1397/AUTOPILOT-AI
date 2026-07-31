@@ -1,0 +1,17 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart TB
+    subgraph FastAPI
+        MW[Middleware: cid·rate-limit·errors] --> RT[Routers /api/v1]
+        WSG[WebSocket manager]
+    end
+    subgraph Platform
+        REG[Registries+Factory]; BUS[EventBus]; OBS[Observability/Cost]; PR[PromptRegistry]
+    end
+    subgraph Domain
+        SVCS[Services]; AGS[Agents+Graph]; IF[Interfaces]
+    end
+    subgraph Infra
+        REPO[Repositories]; PROV[10 Providers]; MCPL[MCP layer]; SCH[APScheduler]
+    end
+    RT-->SVCS-->REPO; SVCS-->AGS-->IF; IF<-- impl ---PROV
+    AGS-->PR; AGS-->OBS; SVCS-->BUS; WSG<-->BUS; SVCS-->REG; AGS-->MCPL

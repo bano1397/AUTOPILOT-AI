@@ -1,0 +1,9 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+flowchart LR
+    EXECS["AI_EXECUTION + TOOL_CALL"] --> AGG["Aggregations"]
+    AGG --> D1["Token usage (by model/agent/day)"]
+    AGG --> D2["Provider usage"]
+    AGG --> D3["Cost (USD)"]
+    AGG --> D4["Avg response time"]
+    AGG --> D5["Model comparison"]
+    AGG --> D6["Agent performance / error rate"]

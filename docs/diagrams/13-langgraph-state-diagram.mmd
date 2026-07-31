@@ -1,0 +1,24 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+stateDiagram-v2
+    [*] --> Supervisor
+    Supervisor --> EmailAgent: intent=email
+    Supervisor --> RAGAgent: intent=knowledge
+    Supervisor --> ResearchAgent: intent=research
+    Supervisor --> TaskAgent: intent=planning
+    Supervisor --> CalendarAgent: intent=calendar
+    Supervisor --> AnalyticsAgent: intent=report
+    EmailAgent --> MemoryAgent
+    RAGAgent --> MemoryAgent
+    ResearchAgent --> MemoryAgent
+    TaskAgent --> MemoryAgent
+    CalendarAgent --> MemoryAgent
+    AnalyticsAgent --> MemoryAgent
+    MemoryAgent --> Decision
+    Decision --> HumanApproval: needs_approval
+    Decision --> Execute: auto
+    HumanApproval --> Execute: approved
+    HumanApproval --> Rejected: rejected
+    HumanApproval --> Supervisor: edited/retry
+    Execute --> SaveMemory
+    Rejected --> SaveMemory
+    SaveMemory --> [*]

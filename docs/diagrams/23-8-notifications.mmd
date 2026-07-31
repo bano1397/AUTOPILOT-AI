@@ -1,0 +1,9 @@
+%% Generated from docs/ARCHITECTURE.md — edit that file, not this one.
+sequenceDiagram
+    participant B as EventBus
+    participant H as Notification handler
+    participant P as NotificationProvider
+    participant U as User/UI
+    B-->>H: NotificationRequested / ApprovalRequired / WorkflowFailed
+    H->>P: dispatch (channel from prefs)
+    P-->>U: Telegram / Email / in-app (WS)

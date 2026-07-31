@@ -20,9 +20,9 @@ select it in a deployment meant to be useful.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 
-from app.domain.interfaces.llm import ChatMessage, ChatRole, LLMResult
+from app.domain.interfaces.llm import ChatMessage, ChatRole, LLMResult, StreamChunk
 from app.platform.registry import register_provider
 
 MODEL_NAME = "stub"
@@ -93,6 +93,28 @@ class StubLLMProvider:
             completion_tokens=len(content.split()),
             duration_ms=0,
         )
+
+    async def chat_stream(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """Emit the same fixed reply word by word.
+
+        Deterministic and instant -- there is no artificial delay, because a
+        sleep here would slow the e2e suite without testing anything. What it
+        does exercise is the streaming *path*: chunk framing, accumulation, and
+        the terminal usage chunk.
+        """
+        result = await self.chat(
+            messages, temperature=temperature, max_tokens=max_tokens
+        )
+        words = result.content.split(" ")
+        for index, word in enumerate(words):
+            yield StreamChunk(delta=word if index == 0 else f" {word}")
+        yield StreamChunk(done=True, result=result)
 
     def _reply(self, system: str, request: str) -> str:
         if _ROUTING_MARKER in system:

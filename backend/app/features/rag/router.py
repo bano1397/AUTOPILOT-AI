@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
+
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from app.core.schemas import ApiResponse
 from app.features.preferences.dependencies import get_preferences_service
@@ -56,4 +60,52 @@ async def ask_documents(
             model=result.model,
             sources=[RagMatchRead.from_chunk(match) for match in result.matches],
         )
+    )
+
+
+@router.post("/ask/stream")
+async def ask_documents_streaming(
+    payload: RagAskRequest,
+    workspace_user: User = Depends(get_workspace_user),
+    service: RagAskService = Depends(get_rag_ask_service),
+    preferences: PreferencesService = Depends(get_preferences_service),
+) -> StreamingResponse:
+    """Grounded answer, streamed as Server-Sent Events.
+
+    Same retrieval, compression, and citations as ``POST /rag/ask`` — only the
+    delivery differs. Time-to-first-token is what a user experiences as speed,
+    and a four-second answer that starts rendering immediately reads as fast
+    while the same answer delivered whole reads as broken.
+
+    Frames: ``sources`` (once, first), then ``delta`` per token group, then
+    ``done``. Errors after the first byte arrive as an ``error`` frame — the
+    status line is long gone by then, so an HTTP code is not available.
+    """
+    top_k = payload.top_k or (await preferences.get()).default_top_k
+
+    async def frames() -> AsyncIterator[str]:
+        async for frame in service.ask_stream(
+            workspace_user.id, payload.query, top_k=top_k
+        ):
+            # Indexed rather than destructured, so the tagged union narrows:
+            # mypy then knows a "sources" frame carries chunks and a "delta"
+            # frame carries text.
+            if frame[0] == "sources":
+                body: object = [
+                    RagMatchRead.from_chunk(chunk).model_dump(mode="json")
+                    for chunk in frame[1]
+                ]
+            else:
+                body = frame[1]
+            yield f"event: {frame[0]}\ndata: {json.dumps(body)}\n\n"
+
+    return StreamingResponse(
+        frames(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # Tell nginx and friends not to buffer, which would defeat the
+            # entire point by delivering the stream in one lump at the end.
+            "X-Accel-Buffering": "no",
+        },
     )

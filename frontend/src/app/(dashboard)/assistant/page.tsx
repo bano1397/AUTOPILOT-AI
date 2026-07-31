@@ -9,8 +9,7 @@ import { SourcesList } from "@/components/common/sources-list";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ChatComposer } from "@/components/chat/chat-composer";
-import { useRagAsk } from "@/features/rag/hooks";
-import { ApiError } from "@/lib/api/types";
+import { useRagAskStream } from "@/features/rag/hooks";
 import { useChatStore } from "@/lib/chat/store";
 
 const EXAMPLES = [
@@ -21,13 +20,28 @@ const EXAMPLES = [
 
 export default function AssistantPage() {
   const [query, setQuery] = useState("");
-  const ask = useRagAsk();
-  const result = useChatStore((state) => state.assistantResult);
+  const [asked, setAsked] = useState<string | null>(null);
+  const stream = useRagAskStream();
+  const stored = useChatStore((state) => state.assistantResult);
+
+  // While streaming, render the partial answer; once finished, fall back to
+  // the committed result so navigating away and back still shows it.
+  const live = stream.isStreaming || stream.answer.length > 0;
+  const result = live
+    ? {
+        query: asked ?? "",
+        answer: stream.answer,
+        grounded: stream.sources.length > 0,
+        model: null,
+        sources: stream.sources,
+      }
+    : stored;
 
   function submit(value: string) {
     const trimmed = value.trim();
-    if (trimmed && !ask.isPending) {
-      ask.mutate({ query: trimmed });
+    if (trimmed && !stream.isStreaming) {
+      setAsked(trimmed);
+      void stream.ask(trimmed);
       setQuery("");
     }
   }
@@ -45,7 +59,7 @@ export default function AssistantPage() {
       </div>
 
       <div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto py-4">
-        {!result && !ask.isPending && (
+        {!result && !stream.isStreaming && (
           <div className="flex flex-col items-center py-12 text-center">
             <div className="flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg">
               <FileText className="size-6" />
@@ -69,22 +83,21 @@ export default function AssistantPage() {
           </div>
         )}
 
-        {ask.isPending && (
+        {/* Sources arrive before any prose, so citations render while the
+            answer is still being written. */}
+        {stream.isStreaming && stream.answer.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            Generating an answer from your documents… local models can take a
-            minute on CPU.
+            {stream.sources.length > 0
+              ? `Found ${stream.sources.length} source${stream.sources.length === 1 ? "" : "s"} — writing the answer…`
+              : "Searching your documents…"}
           </p>
         )}
 
-        {ask.isError && (
-          <p className="text-sm text-destructive">
-            {ask.error instanceof ApiError
-              ? ask.error.message
-              : "The assistant is unavailable."}
-          </p>
+        {stream.error && (
+          <p className="text-sm text-destructive">{stream.error}</p>
         )}
 
-        {result && !ask.isPending && (
+        {result && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -99,6 +112,9 @@ export default function AssistantPage() {
                   )}
                   {result.model && (
                     <Badge variant="outline">{result.model}</Badge>
+                  )}
+                  {stream.isStreaming && (
+                    <Badge variant="secondary">streaming…</Badge>
                   )}
                   <span className="text-xs text-muted-foreground">
                     “{result.query}”
@@ -116,7 +132,7 @@ export default function AssistantPage() {
         value={query}
         onChange={setQuery}
         onSubmit={() => submit(query)}
-        pending={ask.isPending}
+        pending={stream.isStreaming}
         placeholder="Ask a question about your documents…"
         maxLength={2000}
       />

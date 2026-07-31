@@ -11,8 +11,9 @@ availability.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
+from typing import Any, Literal
 from uuid import UUID
 
 from app.core.config import get_settings
@@ -224,6 +225,17 @@ class RagService:
         return [candidates[index].with_score(score) for index, score in ranked]
 
 
+# A tagged union rather than (str, object): the router narrows on the tag, so
+# rendering a `sources` frame as text (or vice versa) is a type error, not a
+# runtime surprise halfway through a stream.
+AskStreamEvent = (
+    tuple[Literal["sources"], list[RetrievedChunk]]
+    | tuple[Literal["delta"], str]
+    | tuple[Literal["done"], dict[str, Any]]
+    | tuple[Literal["error"], str]
+)
+
+
 @dataclass(frozen=True)
 class AskResult:
     """Outcome of a grounded ask."""
@@ -328,3 +340,67 @@ class RagAskService:
             matches=kept,
             compression=compression,
         )
+
+    async def ask_stream(
+        self,
+        user_id: UUID,
+        question: str,
+        *,
+        top_k: int,
+        feature: str = "rag.ask",
+        history: Sequence[dict[str, str]] = (),
+    ) -> AsyncIterator[AskStreamEvent]:
+        """Answer as above, but emit the reply as it is generated.
+
+        Yields ``(event, payload)`` pairs. Sources come **first**, before any
+        text: the UI can render citations while the answer is still arriving,
+        and a reader can see what the answer is grounded in before deciding
+        whether to trust it.
+
+        Retrieval and compression are identical to :meth:`ask` -- only the
+        generation step differs -- so a streamed answer is grounded in exactly
+        the same context a non-streamed one would have been.
+        """
+        matches = await self._retrieval.query(user_id, question, top_k=top_k)
+        if not matches:
+            yield "sources", []
+            yield "delta", NO_CONTEXT_ANSWER
+            yield "done", {"grounded": False, "model": None}
+            return
+
+        settings = get_settings()
+        compression = compress(
+            matches, budget_tokens=settings.rag_context_budget_tokens
+        )
+        kept = compression.chunks
+        if not kept:
+            yield "sources", []
+            yield "delta", NO_CONTEXT_ANSWER
+            yield "done", {"grounded": False, "model": None}
+            return
+
+        yield "sources", kept
+
+        model: str | None = None
+        try:
+            async for chunk in self._recorder.chat_stream(
+                self._llm,
+                build_ask_messages(question, kept, history),
+                feature=feature,
+                user_id=user_id,
+                temperature=0.2,
+                prompt_key="rag.ask.system",
+                prompt_version=1,
+            ):
+                if chunk.delta:
+                    yield "delta", chunk.delta
+                if chunk.done and chunk.result is not None:
+                    model = chunk.result.model
+        except Exception as exc:
+            logger.warning("rag.ask_stream_failed", extra={"error": str(exc)})
+            # The client has already received partial text, so an HTTP error
+            # code is no longer available: report it in-band instead.
+            yield "error", "The language model became unavailable mid-answer."
+            return
+
+        yield "done", {"grounded": True, "model": model}

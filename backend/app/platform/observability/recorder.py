@@ -16,14 +16,20 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from uuid import UUID
 
 from app.core.logging import correlation_id_var, get_logger
 from app.domain.events import CostRecorded
 from app.domain.interfaces.database import DatabaseProvider
 from app.domain.interfaces.event_bus import EventBus
-from app.domain.interfaces.llm import ChatMessage, LLMProvider, LLMResult
+from app.domain.interfaces.llm import (
+    ChatMessage,
+    LLMProvider,
+    LLMResult,
+    StreamChunk,
+    StreamingLLMProvider,
+)
 from app.platform.observability.models import AiExecution
 from app.platform.observability.pricing import compute_cost
 
@@ -102,6 +108,78 @@ class AiExecutionRecorder:
             prompt_version=prompt_version,
         )
         return result
+
+    async def chat_stream(
+        self,
+        llm: LLMProvider,
+        messages: Sequence[ChatMessage],
+        *,
+        feature: str,
+        user_id: UUID | None = None,
+        agent_name: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        prompt_key: str | None = None,
+        prompt_version: int | None = None,
+    ) -> AsyncIterator[StreamChunk]:
+        """Stream ``llm.chat_stream`` and persist one execution record at the end.
+
+        The record is written when the stream terminates -- successfully or
+        not -- so a streamed call is audited exactly as completely as a
+        one-shot one. A client that disconnects mid-stream still produces a
+        record, because the generator's cleanup runs on close.
+        """
+        if not isinstance(llm, StreamingLLMProvider):
+            # Fall back rather than fail: a non-streaming provider costs the
+            # caller responsiveness, not the answer.
+            result = await self.chat(
+                llm,
+                messages,
+                feature=feature,
+                user_id=user_id,
+                agent_name=agent_name,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                prompt_key=prompt_key,
+                prompt_version=prompt_version,
+            )
+            yield StreamChunk(delta=result.content)
+            yield StreamChunk(done=True, result=result)
+            return
+
+        provider_name = str(getattr(llm, "name", "unknown"))
+        started = time.perf_counter()
+        final: LLMResult | None = None
+        error: str | None = None
+        try:
+            async for chunk in llm.chat_stream(
+                list(messages), temperature=temperature, max_tokens=max_tokens
+            ):
+                if chunk.done:
+                    final = chunk.result
+                yield chunk
+        except Exception as exc:
+            error = str(exc)
+            raise
+        finally:
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            await self._record(
+                feature=feature,
+                user_id=user_id,
+                agent_name=agent_name,
+                provider=provider_name,
+                model=final.model if final else "unknown",
+                messages=messages,
+                response_preview=(
+                    final.content[:_PREVIEW_CHARS] if final else None
+                ),
+                prompt_tokens=final.prompt_tokens if final else 0,
+                completion_tokens=final.completion_tokens if final else 0,
+                duration_ms=(final.duration_ms if final else 0) or elapsed_ms,
+                error=error,
+                prompt_key=prompt_key,
+                prompt_version=prompt_version,
+            )
 
     async def _record(
         self,

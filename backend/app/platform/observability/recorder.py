@@ -30,6 +30,7 @@ from app.domain.interfaces.llm import (
     StreamChunk,
     StreamingLLMProvider,
 )
+from app.platform.metrics import observe_ai_call
 from app.platform.observability.models import AiExecution
 from app.platform.observability.pricing import compute_cost
 
@@ -199,6 +200,17 @@ class AiExecutionRecorder:
         prompt_version: int | None = None,
     ) -> None:
         """Persist the execution and publish ``CostRecorded``. Never raises."""
+        # Recorded before the write: the in-process counters should reflect the
+        # call even if persisting it fails, since that failure is itself the
+        # kind of thing an operator watches for.
+        observe_ai_call(
+            provider=provider,
+            feature=feature,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            duration_seconds=duration_ms / 1000.0,
+            error=error is not None,
+        )
         cost_usd = compute_cost(provider, model, prompt_tokens, completion_tokens)
         try:
             execution = AiExecution(

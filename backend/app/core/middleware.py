@@ -16,6 +16,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.core.logging import correlation_id_var, get_logger
+from app.platform.metrics import observe_http_request
 
 REQUEST_ID_HEADER = "X-Request-ID"
 
@@ -53,6 +54,21 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _route_template(request: Request) -> str:
+    """The matched route pattern, or the raw path when nothing matched.
+
+    The template is what keeps metric cardinality bounded: labelling by
+    ``request.url.path`` would create a fresh series per document id. An
+    unmatched request is a 404 and its path is attacker-controlled, so those
+    collapse to a single bucket rather than becoming series of their own.
+    """
+    route = request.scope.get("route")
+    path = getattr(route, "path", None)
+    if isinstance(path, str):
+        return path
+    return "unmatched"
+
+
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
     """Attach a correlation id to the request/response and log completion."""
 
@@ -64,8 +80,15 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         start = time.perf_counter()
         try:
             response = await call_next(request)
-            duration_ms = round((time.perf_counter() - start) * 1000, 2)
+            elapsed = time.perf_counter() - start
+            duration_ms = round(elapsed * 1000, 2)
             response.headers[REQUEST_ID_HEADER] = correlation_id
+            observe_http_request(
+                method=request.method,
+                route=_route_template(request),
+                status_code=response.status_code,
+                duration_seconds=elapsed,
+            )
             logger.info(
                 "http_request",
                 extra={

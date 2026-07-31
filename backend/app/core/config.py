@@ -165,6 +165,12 @@ class Settings(BaseSettings):
     qdrant_url: str | None = None
     qdrant_api_key: str | None = None
 
+    # --- Event bus ------------------------------------------------------------
+    # Unset keeps the in-process bus, which is correct for a single replica.
+    # Setting REDIS_URL mirrors events to other replicas over pub/sub so a
+    # document indexed on one is visible to a client connected to another.
+    redis_url: str | None = None
+
     # --- Calendar -----------------------------------------------------------
     # `local` stores events in this platform's own database, so scheduling
     # works with no external account. `google` selects the adapter seam, which

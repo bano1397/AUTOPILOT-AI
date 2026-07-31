@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 from uuid import UUID
 
 from fastapi import FastAPI
@@ -57,7 +58,7 @@ from app.infrastructure.vectorstore import (
     QdrantVectorStore,
 )
 from app.mcp import discover_mcp_tools
-from app.platform.events import InProcessEventBus
+from app.platform.events import InProcessEventBus, RedisEventBus
 from app.platform.observability.recorder import AiExecutionRecorder
 from app.platform.registry import discover_plugins
 from app.workflows.checkpointer import WorkflowCheckpointer
@@ -193,9 +194,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Application-scoped services. The event bus decouples producers from
     # consumers; the database provider owns the async engine/session factory.
-    event_bus = InProcessEventBus()
+    # A Redis URL upgrades the bus to cross-replica delivery; without one the
+    # in-process bus is correct for the single-replica deployment this targets.
+    event_bus: Any = (
+        RedisEventBus(settings.redis_url)
+        if settings.redis_url
+        else InProcessEventBus()
+    )
     db = SqlAlchemyDatabaseProvider(database_url=settings.database_url, echo=settings.db_echo)
-    checkpointer = WorkflowCheckpointer(settings.checkpoint_db_path)
+    checkpointer = WorkflowCheckpointer(
+        settings.checkpoint_db_path, database_url=settings.database_url
+    )
     scheduler = SchedulerManager()
 
     @asynccontextmanager
@@ -205,6 +214,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Remote MCP tools join the same registry as native ones. Config-gated
         # and failure-isolated: an unreachable server never blocks boot.
         mcp_summary = await discover_mcp_tools(settings.mcp_servers)
+        # Cross-replica event delivery, when configured.
+        if isinstance(event_bus, RedisEventBus):
+            await event_bus.start()
         # Workflow pause/resume state (LangGraph checkpoints).
         await checkpointer.start()
         # Recurring jobs need the running event loop, hence started here.
@@ -222,6 +234,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         yield
         scheduler.shutdown()
+        if isinstance(event_bus, RedisEventBus):
+            await event_bus.stop()
         await checkpointer.stop()
         await db.dispose()
         logger.info("app.shutdown")

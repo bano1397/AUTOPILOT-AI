@@ -38,6 +38,17 @@ dependencies = [
 # OCR for scanned documents. Optional because it also needs the Tesseract
 # *binary* (apt-get install tesseract-ocr / brew install tesseract), which pip
 # cannot provide -- see app/infrastructure/extraction/ocr.py.
+# Cross-replica event delivery. Optional: the in-process bus is correct for a
+# single replica, which is what the default deployment runs.
+redis = [
+    "redis>=5.0,<7.0",
+]
+# Durable LangGraph checkpoints on Postgres. Optional because the SQLite saver
+# is bundled and sufficient for single-node development; production wants this
+# so paused runs survive a restart.
+postgres = [
+    "langgraph-checkpoint-postgres>=2.0,<4.0",
+]
 ocr = [
     "pytesseract>=0.3.10,<0.4",
     "pillow>=10.3,<12.0",

@@ -8,13 +8,14 @@ milestones that introduce those dependencies.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.core.config import Settings, get_settings
 from app.core.dependencies import get_database
 from app.core.logging import get_logger
 from app.domain.interfaces.database import DatabaseProvider
 from app.features.system.schemas import HealthResponse, ReadinessResponse, RootResponse
+from app.platform.metrics import metrics
 
 logger = get_logger("app.system")
 
@@ -35,6 +36,7 @@ async def health() -> HealthResponse:
 
 @router.get("/health/ready", response_model=ReadinessResponse)
 async def readiness(
+    request: Request,
     response: Response,
     db: DatabaseProvider = Depends(get_database),
 ) -> ReadinessResponse:
@@ -50,10 +52,34 @@ async def readiness(
         checks["database"] = "error"
         healthy = False
 
+    # Surfaced because a SQLite checkpointer on an ephemeral disk means paused
+    # runs do not survive a restart -- a property worth seeing on a probe
+    # rather than discovering when an approval cannot be resumed.
+    checkpointer = getattr(request.app.state, "checkpointer", None)
+    if checkpointer is not None:
+        checks["checkpointer"] = str(getattr(checkpointer, "backend", "unknown"))
+
     response.status_code = (
         status.HTTP_200_OK if healthy else status.HTTP_503_SERVICE_UNAVAILABLE
     )
     return ReadinessResponse(status="ready" if healthy else "not_ready", checks=checks)
+
+
+@router.get("/metrics", include_in_schema=False)
+async def prometheus_metrics() -> Response:
+    """Prometheus exposition for this process.
+
+    Unversioned and outside ``/api/v1`` like the health probes: a scraper's
+    target should not move when the API version does.
+
+    Per-replica and in-memory — counters reset on restart, which is what
+    Prometheus expects. This never touches the database, so scraping more
+    often costs nothing but CPU.
+    """
+    return Response(
+        content=metrics.render(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 @router.get("/", response_model=RootResponse)

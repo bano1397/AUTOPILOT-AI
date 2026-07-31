@@ -108,22 +108,25 @@ Designed in `ARCHITECTURE.md`, absent from the code:
 | §18 Prompt registry / versioning / eval | Not built (prompts are module constants) |
 | §16 Six-level memory | 4 of 6 — no long-term vector memory, no user preferences |
 | FR Email agent (9-intent IMAP→draft→approve→SMTP) | Not built |
-| FR Calendar agent | Not built |
+| FR Calendar agent | ✅ **Built** (2026-07-31) — local backend, Google seam |
 | §20 Workflow versioning / rollback / clone | ✅ **Built** (2026-07-30) |
 | §17 OCR, hybrid search, reranking, compression | ✅ **Built** (2026-07-30) |
 | WebSocket live status | ✅ **Built** (2026-07-30) |
 | Visual (drag-and-drop) workflow builder | Not built, deliberately — see §7b 3.4 |
-| Dashboard aggregate endpoint | Not built (UI composes 3 calls client-side) |
+| Dashboard aggregate endpoint | ✅ **Built** (2026-07-31) |
 
 ### F5 — Operational gaps
 
 - ~~No end-to-end test suite (no Playwright/Cypress).~~ **Closed** — see §6 2.4.
-- Event bus is in-process → correctness assumes a single replica. (The rate
-  limiter is removed in Phase 0.2 along with the auth endpoints it protected,
-  leaving the public URL unthrottled — see §3.)
-- Render free tier has an ephemeral disk: uploaded file bytes and
-  `workflow_checkpoints.db` are lost on restart (Postgres + Qdrant survive).
-- Settings page is read-only display + theme; nothing persists server-side.
+- ~~Event bus is in-process → correctness assumes a single replica.~~
+  **Closed** — `REDIS_URL` enables cross-replica delivery (§8). The public URL
+  remains unthrottled: the rate limiter went with authentication in Phase 0
+  (§3), and that is a consequence of having no accounts, not an oversight.
+- ~~Render free tier has an ephemeral disk: uploaded file bytes and
+  `workflow_checkpoints.db` are lost on restart.~~ **Closed** — uploads move to
+  S3/R2 (§5), and checkpoints follow `DATABASE_URL` to Postgres (§8).
+- ~~Settings page is read-only display + theme.~~ **Closed** — workspace
+  preferences persist and change behaviour (§6 2.3).
 - ~~`.env` holds real values in the working tree — history should be audited.~~
   **Closed** — history scanned, no secrets ever committed (§8).
 
@@ -637,9 +640,27 @@ Local-default calendar adapter with a Google adapter seam; single
 
 ## 8. Phase 4 — Scale and ops (as needed)
 
-- Redis event bus + Redis rate limiter → multi-replica correctness (F5).
-- Postgres-backed LangGraph checkpointer → checkpoints survive restarts.
-- `/metrics` endpoint (Prometheus) alongside the existing JSON logs.
+- ~~Redis event bus → multi-replica correctness (F5).~~ ✅ **done** —
+  `REDIS_URL` upgrades the bus to cross-replica pub/sub. Local delivery stays
+  synchronous and happens *first*, which is a correctness requirement rather
+  than an optimisation: ingestion is driven by awaiting
+  `publish(DocumentUploaded)`, so routing it through Redis would make an upload
+  return before its document was indexed. Redis being down degrades exactly to
+  in-process behaviour and never fails a request. Verified against a real Redis
+  7, including cross-replica delivery and the origin check that stops a
+  publisher handling its own event twice. *(The Redis rate limiter is moot —
+  the rate limiter was removed with authentication in Phase 0; see §3.)*
+- ~~Postgres-backed LangGraph checkpointer.~~ ✅ **done** — the backend follows
+  `DATABASE_URL` rather than adding a second setting, so durable data and
+  durable checkpoints cannot drift into disagreement. A missing `postgres`
+  extra warns and falls back to SQLite rather than refusing to boot, and
+  `/health/ready` reports which backend is live.
+- ~~`/metrics` endpoint (Prometheus).~~ ✅ **done** — hand-rolled registry
+  (counters, histograms, labels) rather than a dependency, since the exposition
+  format is a few lines of text. HTTP requests are labelled by **route
+  template**, not path, so document ids cannot mint unbounded series, and
+  unmatched 404 paths collapse to one bucket. Scraping never touches the
+  database.
 - ~~Diagram export pipeline (`scripts/export-diagrams`, Appendix B)~~ ✅
   **done** — `scripts/export-diagrams.py` derives 28 `.mmd` files from the
   Mermaid blocks in the markdown rather than keeping a hand-maintained second
@@ -660,7 +681,7 @@ Local-default calendar adapter with a Google adapter seam; single
 Phase 0  ✅ DONE      Green gates + auth removed
 Phase 1  ✅ DONE      Deployable, honestly documented   (1.4 blocked: no credentials)
 Phase 2  ✅ DONE      Tools ✅ · Prompts ✅ · Preferences ✅ · Memory ✅ · e2e ✅
-Phase 3  ◐ PARTIAL    Email ✅ · MCP ✅ · RAG depth ✅ · Workflow lifecycle ✅
+Phase 3  ✅ DONE      Email ✅ · MCP ✅ · RAG depth ✅ · Workflow lifecycle ✅ · Calendar ✅
 Phase 4  ☐ NOT STARTED Redis · Postgres checkpoints · metrics · diagrams
 ```
 

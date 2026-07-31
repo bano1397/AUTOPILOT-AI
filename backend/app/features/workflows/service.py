@@ -34,6 +34,7 @@ from app.domain.interfaces.database import DatabaseProvider
 from app.domain.interfaces.event_bus import EventBus
 from app.features.workflows.models import WorkflowRun, WorkflowRunStatus, WorkflowStep
 from app.features.workflows.repository import WorkflowRunRepository
+from app.platform.metrics import observe_workflow_run
 
 logger = get_logger("app.features.workflows")
 
@@ -121,6 +122,7 @@ class WorkflowExecutor:
             output=output,
             duration_ms=total_ms,
         )
+        observe_workflow_run(workflow=workflow_name, status="completed")
         await self._bus.publish(WorkflowCompleted(run_id=str(run_id)))
         return ExecutionOutcome(run_id, state)
 
@@ -237,6 +239,7 @@ class WorkflowExecutor:
             error=str(exc)[:2000],
             duration_ms=total_ms,
         )
+        observe_workflow_run(workflow=workflow_name, status="failed")
         await self._bus.publish(WorkflowFailed(run_id=str(run_id), error=str(exc)[:500]))
         logger.warning(
             "workflow.failed", extra={"run_id": str(run_id), "workflow": workflow_name}

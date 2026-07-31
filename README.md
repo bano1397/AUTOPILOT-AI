@@ -57,6 +57,14 @@ designed but not yet built — see the guides.) Full design in
   a workflow from its active spec.
 - **Live run status** — workflow progress streams to the browser over a
   WebSocket as each graph node completes.
+- **Streaming answers** — the assistant renders token by token, with citations
+  shown before the prose so you can judge grounding while it writes.
+- **Calendar** — a local scheduling backend with free-slot search, and an agent
+  that answers "when am I free?" from the real calendar rather than inventing
+  a time.
+- **Operations** — Prometheus `/metrics`, an optional Redis event bus for
+  multi-replica correctness, and Postgres-backed workflow checkpoints that
+  survive a restart.
 
 ---
 
@@ -183,10 +191,15 @@ against actually-executed gate runs. As-built module detail:
 [`docs/PROJECT_ANALYSIS.md`](docs/PROJECT_ANALYSIS.md); design blueprint:
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-Not yet built (designed, not shipped): calendar agent, dashboard aggregate
-endpoint, and the drag-and-drop visual workflow builder — the last of these
-deliberately, since the graph spec describes one fixed topology rather than
-arbitrary node wiring.
+Not built, deliberately: the drag-and-drop visual workflow builder. The graph
+spec describes one fixed topology rather than arbitrary node wiring, so a
+canvas editor would have nothing meaningful to edit; the workflow UI publishes
+versions, activates, rolls back, and clones instead.
+
+Built but **unverified against the real service**: the S3/R2 signing, the
+IMAP/SMTP transports, the Jina reranker, and the Google Calendar adapter (which
+is an explicit seam with no OAuth flow — it fails loudly rather than reporting
+an empty calendar). Each is tested against mocks and labelled as such in code.
 
 > Chat/agent features use the Ollama model set by `LLM_MODEL` (default
 > `llama3`; `llama3.2` is a lighter alternative):

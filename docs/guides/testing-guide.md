@@ -9,7 +9,7 @@ Every change must pass, on both sides:
 cd backend
 ruff check .          # lint
 mypy app              # strict type-check
-pytest                # 500+ tests
+pytest                # 580+ tests
 
 # frontend
 cd frontend
@@ -70,6 +70,18 @@ pip install -e '.[ocr]' && AUTOPILOT_OCR_TESTS=1 pytest tests/unit/test_ocr.py
 They pass against Tesseract 5.5.0 — including reading text back out of a
 generated image and the scanned-PDF fallback. CI runs the suite without
 Tesseract, so those three skip there.
+
+`tests/integration/test_ops.py` does the same for the Redis event bus. The
+degradation path (Redis unreachable → in-process behaviour) runs everywhere;
+the cross-replica tests need a real server:
+
+```bash
+docker run -d -p 6379:6379 redis:7-alpine
+pip install -e '.[redis]' && pytest tests/integration/test_ops.py
+```
+
+They pass against Redis 7, including delivery between two bus instances and
+the origin check that stops a publisher handling its own event twice.
 
 ## End-to-end tests
 

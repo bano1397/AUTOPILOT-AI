@@ -199,8 +199,10 @@ test.describe("AutoPilot AI core journeys", () => {
     await page.goto("/workflows");
     await page.getByRole("tab", { name: "Definitions" }).click();
 
-    // Narrow v2 to knowledge only: deselect every other agent.
-    for (const agent of ["general", "planner", "research"]) {
+    // Narrow v2 to knowledge only: deselect every other routable agent.
+    // Listed explicitly so adding an agent fails here loudly rather than
+    // silently leaving two enabled and making the routing assertion flaky.
+    for (const agent of ["general", "planner", "research", "calendar"]) {
       await page.getByRole("button", { name: agent, exact: true }).click();
     }
     await page.getByRole("button", { name: /Publish new version/ }).click();

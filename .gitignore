@@ -20,6 +20,9 @@ env/
 .coverage
 htmlcov/
 *.db
+# SQLite write-ahead-log sidecars, created at runtime beside *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 
 # --- Node / Next.js ---------------------------------------------------------
@@ -53,3 +56,6 @@ frontend/e2e/.artifacts/
 frontend/playwright-report/
 frontend/test-results/
 backend/.e2e-state/
+
+# Personal proposal material, not project code
+demo-documents/shehar-b-rag-case-study.pdf

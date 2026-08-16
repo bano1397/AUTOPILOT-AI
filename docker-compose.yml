@@ -15,7 +15,9 @@ services:
       DATABASE_URL: sqlite+aiosqlite:////data/autopilot.db
       CHECKPOINT_DB_PATH: /data/workflow_checkpoints.db
       DOCUMENTS_DIR: /app/documents
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production-set-a-secure-random-secret}
+      # No JWT secret: this platform has no authentication (see
+      # docs/COMPLETION_PLAN.md §3). Anyone who can reach the port has full
+      # access to the instance.
       CORS_ORIGINS: http://localhost:3000,http://localhost:3001
       LOG_FORMAT: json
       OLLAMA_BASE_URL: http://ollama:11434

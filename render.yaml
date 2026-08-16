@@ -27,8 +27,14 @@ services:
         value: qdrant
       - key: CHROMA_COLLECTION
         value: autopilot_documents
+      # `local` so a first deploy boots with no object-storage account set up.
+      # Uploaded file BYTES then live on Render's ephemeral disk and are lost on
+      # restart (Postgres rows and Qdrant vectors survive, so search keeps
+      # working). To make files durable: create a Cloudflare R2 bucket, set the
+      # four S3_* secrets below, and change this to `s3`. Do not set `s3`
+      # without those secrets — the backend fails fast at boot by design.
       - key: STORAGE_PROVIDER
-        value: s3
+        value: local
       - key: DOCUMENTS_DIR
         value: /data/documents
       - key: CHECKPOINT_DB_PATH
@@ -46,6 +52,7 @@ services:
         sync: false
       - key: QDRANT_API_KEY
         sync: false
+      # Optional — only needed when STORAGE_PROVIDER=s3 (see above).
       - key: S3_BUCKET
         sync: false
       - key: S3_ENDPOINT_URL # R2: https://<ACCOUNT_ID>.r2.cloudflarestorage.com
